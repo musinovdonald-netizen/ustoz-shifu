@@ -306,6 +306,88 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
   .status.paid{background:rgba(47,104,68,.1); color:var(--route-green);}
   .status.pending{background:rgba(232,162,61,.14); color:#9c6a17;}
   .status.overdue{background:rgba(193,68,60,.1); color:var(--alert);}
+
+  select.status-select{
+    appearance:none;
+    -webkit-appearance:none;
+    font-family:'IBM Plex Sans',sans-serif;
+    border:1px solid transparent;
+    cursor:pointer;
+    padding-right:22px;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%235C6B7A' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat:no-repeat;
+    background-position:right 8px center;
+  }
+  select.status-select:hover{border-color:var(--line);}
+  select.status-select:focus-visible{outline:2px solid var(--amber); outline-offset:1px;}
+
+  /* ---------- Payroll ---------- */
+  .driver-card{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    margin-bottom:16px;
+    overflow:hidden;
+  }
+  .driver-head{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    padding:14px 18px;
+    background:var(--paper);
+    border-bottom:1px solid var(--line);
+    flex-wrap:wrap;
+    gap:10px;
+  }
+  .driver-head-left{display:flex; align-items:center; gap:10px;}
+  .driver-name{font-family:'Space Grotesk',sans-serif; font-weight:600; font-size:15px;}
+  .driver-unit{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:11.5px;
+    color:var(--steel);
+    background:var(--panel);
+    border:1px solid var(--line);
+    padding:2px 8px;
+    border-radius:20px;
+  }
+  .driver-actions{display:flex; gap:8px; align-items:center;}
+  .driver-actions .btn{padding:6px 12px; font-size:12.5px;}
+  .icon-btn{
+    background:none; border:none; cursor:pointer; color:var(--steel-soft);
+    padding:4px; border-radius:5px; display:flex;
+  }
+  .icon-btn:hover{color:var(--alert); background:rgba(193,68,60,.08);}
+
+  .loads-table-wrap{overflow-x:auto;}
+  table.loads-table{width:100%; border-collapse:collapse; min-width:920px;}
+  table.loads-table th{
+    text-align:left; font-size:10.5px; letter-spacing:.04em; text-transform:uppercase;
+    color:var(--steel); font-weight:500; padding:8px 12px; border-bottom:1px solid var(--line);
+    white-space:nowrap;
+  }
+  table.loads-table td{
+    padding:9px 12px; font-size:13px; border-bottom:1px solid var(--line); white-space:nowrap;
+  }
+  table.loads-table tfoot td{
+    font-weight:600; background:var(--paper); border-top:1.5px solid var(--line); border-bottom:none;
+  }
+
+  .load-form-row{
+    display:grid;
+    grid-template-columns:repeat(auto-fit, minmax(110px,1fr));
+    gap:8px;
+    padding:14px 18px;
+    background:var(--paper);
+    border-top:1px solid var(--line);
+  }
+  .load-form-row label{display:flex; flex-direction:column; gap:3px;}
+  .load-form-row span{font-size:10.5px; color:var(--steel); text-transform:uppercase; letter-spacing:.03em;}
+  .load-form-row input{
+    font-family:'IBM Plex Sans',sans-serif; font-size:12.5px; padding:7px 8px;
+    border-radius:6px; border:1px solid var(--line); background:var(--panel); color:var(--ink);
+  }
+  .load-form-row input:focus-visible{outline:2px solid var(--amber); outline-offset:1px;}
+  .load-form-actions{grid-column:1/-1; display:flex; gap:8px; margin-top:2px;}
   .status.queued{background:var(--paper); color:var(--steel);}
   .status.reading{background:rgba(232,162,61,.14); color:#9c6a17;}
   .status.done{background:rgba(47,104,68,.1); color:var(--route-green);}
@@ -526,6 +608,10 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20V10M11 20V4M18 20v-7"/></svg>
         Hisobotlar
       </a>
+      <a class="nav-item" data-panel="payroll">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="6" width="18" height="14" rx="2"/><path d="M3 10h18"/><circle cx="8" cy="15" r="1.2"/></svg>
+        Payroll
+      </a>
       <a class="nav-item" data-panel="documents">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 3h9l5 5v13H6z"/><path d="M14 3v5h5"/></svg>
         Hujjatlar
@@ -656,6 +742,36 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
           <h3>Hisobot uchun ma'lumot yetarli emas</h3>
           <p>Kamida bitta hisob-faktura qo'shilgach, oylik hisobotlarni shu yerdan yaratishingiz mumkin bo'ladi.</p>
         </div>
+      </div>
+    </section>
+
+    <!-- PAYROLL PANEL -->
+    <section class="panel" id="panel-payroll">
+      <div class="card" style="margin-bottom:18px;">
+        <div class="card-head">
+          <h2>Yangi haydovchi</h2>
+        </div>
+        <form id="addDriverForm" class="settings-form" style="flex-direction:row; align-items:flex-end; max-width:none; flex-wrap:wrap;">
+          <label style="flex:1; min-width:160px;">
+            <span>Ism familiya</span>
+            <input type="text" id="driverName" placeholder="Edgar Aviles" required>
+          </label>
+          <label style="min-width:130px;">
+            <span>Unit №</span>
+            <input type="text" id="driverUnit" placeholder="0007">
+          </label>
+          <button class="btn btn-primary" type="submit" style="align-self:flex-start;">+ Qo'shish</button>
+        </form>
+      </div>
+
+      <div id="driversContainer"></div>
+
+      <div class="card empty" id="payrollEmpty">
+        <div class="empty-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="6" width="18" height="14" rx="2"/><path d="M3 10h18"/></svg>
+        </div>
+        <h3>Hali haydovchi qo'shilmagan</h3>
+        <p>Yuqoridan haydovchi qo'shing, so'ng haftalik yuklarni kiritishni boshlang.</p>
       </div>
     </section>
 
@@ -886,6 +1002,8 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     });
     loadSavedInvoices();
     setupSettingsForms();
+    setupPayrollForm();
+    refreshPayroll();
     initApp._ran = true;
   }
 
@@ -938,6 +1056,217 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
       }catch(err){
         passMsg.textContent = err.message || 'Xatolik yuz berdi';
         passMsg.classList.add('show','err');
+      }
+    });
+  }
+
+  // ---------- Payroll (drivers + weekly loads) ----------
+  const driversContainer = document.getElementById('driversContainer');
+  const payrollEmpty = document.getElementById('payrollEmpty');
+  const addDriverForm = document.getElementById('addDriverForm');
+  let payrollLoaded = false;
+
+  function fmtMoney(n){ return '$' + Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2, maximumFractionDigits:2}); }
+  function fmtNum(n){ return Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2, maximumFractionDigits:2}); }
+  function calcRpm(pay, mileage, dhd){
+    const denom = Number(mileage||0) + Number(dhd||0);
+    return denom > 0 ? (Number(pay||0)/denom) : 0;
+  }
+
+  function renderDriverCard(driver, loads){
+    const card = document.createElement('div');
+    card.className = 'driver-card';
+    card.dataset.driverId = driver.id;
+
+    const totalPay = loads.reduce((s,l)=>s+Number(l.base_pay||0),0);
+    const totalDhd = loads.reduce((s,l)=>s+Number(l.dhd||0),0);
+    const totalMi = loads.reduce((s,l)=>s+Number(l.mileage||0),0);
+    const totalAllMi = totalDhd + totalMi;
+    const totalRpm = calcRpm(totalPay, totalMi, totalDhd);
+
+    const rowsHtml = loads.map(l=>{
+      const rowMi = Number(l.mileage||0) + Number(l.dhd||0);
+      const rpm = calcRpm(l.base_pay, l.mileage, l.dhd);
+      return `
+        <tr data-load-id="${l.id}">
+          <td class="mono">${l.pickup_date || '—'}</td>
+          <td class="mono">${l.delivery_date || '—'}</td>
+          <td>${l.broker || '—'}</td>
+          <td class="mono">${l.load_number || '—'}</td>
+          <td>${l.from_location || '—'}</td>
+          <td>${l.to_location || '—'}</td>
+          <td class="mono">${fmtMoney(l.base_pay)}</td>
+          <td class="mono">${fmtNum(l.dhd)}</td>
+          <td class="mono">${fmtNum(l.mileage)}</td>
+          <td class="mono">${fmtNum(rowMi)}</td>
+          <td class="mono">$${rpm.toFixed(2)}</td>
+          <td><button class="icon-btn delete-load-btn" title="O'chirish" type="button">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>
+          </button></td>
+        </tr>`;
+    }).join('');
+
+    card.innerHTML = `
+      <div class="driver-head">
+        <div class="driver-head-left">
+          <span class="driver-name">${driver.name}</span>
+          ${driver.unit_number ? `<span class="driver-unit">Unit#${driver.unit_number}</span>` : ''}
+        </div>
+        <div class="driver-actions">
+          <button class="btn toggle-load-form-btn" type="button">+ Yuk qo'shish</button>
+          <button class="icon-btn delete-driver-btn" title="Haydovchini o'chirish" type="button">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="loads-table-wrap">
+        <table class="loads-table">
+          <thead>
+            <tr>
+              <th>Pick up</th><th>Delivery</th><th>Broker</th><th>Load#</th><th>From</th><th>To</th>
+              <th>Base Pay</th><th>DHD</th><th>Mileage</th><th>Total Mi</th><th>RPM</th><th></th>
+            </tr>
+          </thead>
+          <tbody class="loads-tbody">${rowsHtml || `<tr><td colspan="12" style="color:var(--steel); font-size:12.5px;">Hali yuk qo'shilmagan</td></tr>`}</tbody>
+          <tfoot>
+            <tr>
+              <td colspan="6">Jami</td>
+              <td class="mono">${fmtMoney(totalPay)}</td>
+              <td class="mono">${fmtNum(totalDhd)}</td>
+              <td class="mono">${fmtNum(totalMi)}</td>
+              <td class="mono">${fmtNum(totalAllMi)}</td>
+              <td class="mono">$${totalRpm.toFixed(2)}</td>
+              <td></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+      <form class="load-form-row" style="display:none;">
+        <label><span>Pick up</span><input type="date" name="pickup_date"></label>
+        <label><span>Delivery</span><input type="date" name="delivery_date"></label>
+        <label><span>Broker</span><input type="text" name="broker" placeholder="ARRIVE LOGISTICS"></label>
+        <label><span>Load #</span><input type="text" name="load_number" placeholder="9445128"></label>
+        <label><span>From</span><input type="text" name="from_location" placeholder="Fort Worth, TX"></label>
+        <label><span>To</span><input type="text" name="to_location" placeholder="Kent, OH"></label>
+        <label><span>Base Pay</span><input type="number" step="0.01" name="base_pay" placeholder="2571.00"></label>
+        <label><span>DHD</span><input type="number" step="0.01" name="dhd" placeholder="49.80"></label>
+        <label><span>Mileage</span><input type="number" step="0.01" name="mileage" placeholder="1216"></label>
+        <div class="load-form-actions">
+          <button class="btn btn-primary" type="submit">Saqlash</button>
+          <button class="btn cancel-load-btn" type="button">Bekor qilish</button>
+        </div>
+      </form>
+    `;
+
+    // toggle add-load form
+    const loadForm = card.querySelector('.load-form-row');
+    card.querySelector('.toggle-load-form-btn').addEventListener('click', ()=>{
+      loadForm.style.display = loadForm.style.display === 'none' ? 'grid' : 'none';
+    });
+    card.querySelector('.cancel-load-btn').addEventListener('click', ()=>{
+      loadForm.reset();
+      loadForm.style.display = 'none';
+    });
+
+    // submit new load
+    loadForm.addEventListener('submit', async (e)=>{
+      e.preventDefault();
+      const fd = new FormData(loadForm);
+      try{
+        const {data: userData} = await sb.auth.getUser();
+        const user = userData && userData.user;
+        if(!user) return;
+        const {error} = await sb.from('loads').insert({
+          user_id: user.id,
+          driver_id: driver.id,
+          pickup_date: fd.get('pickup_date') || null,
+          delivery_date: fd.get('delivery_date') || null,
+          broker: fd.get('broker') || null,
+          load_number: fd.get('load_number') || null,
+          from_location: fd.get('from_location') || null,
+          to_location: fd.get('to_location') || null,
+          base_pay: parseFloat(fd.get('base_pay')) || 0,
+          dhd: parseFloat(fd.get('dhd')) || 0,
+          mileage: parseFloat(fd.get('mileage')) || 0
+        });
+        if(error) throw error;
+        await refreshPayroll();
+      }catch(err){
+        alert("Yukni saqlashda xatolik: " + (err.message || err));
+      }
+    });
+
+    // delete load
+    card.querySelectorAll('.delete-load-btn').forEach(btn=>{
+      btn.addEventListener('click', async ()=>{
+        const tr = btn.closest('tr');
+        const loadId = tr.dataset.loadId;
+        if(!confirm("Bu yukni o'chirasizmi?")) return;
+        try{
+          await sb.from('loads').delete().eq('id', loadId);
+          await refreshPayroll();
+        }catch(err){
+          alert("O'chirishda xatolik: " + (err.message || err));
+        }
+      });
+    });
+
+    // delete driver
+    card.querySelector('.delete-driver-btn').addEventListener('click', async ()=>{
+      if(!confirm(`${driver.name}ni va uning barcha yuklarini o'chirasizmi?`)) return;
+      try{
+        await sb.from('drivers').delete().eq('id', driver.id);
+        await refreshPayroll();
+      }catch(err){
+        alert("O'chirishda xatolik: " + (err.message || err));
+      }
+    });
+
+    return card;
+  }
+
+  async function refreshPayroll(){
+    try{
+      const [{data: drivers, error: dErr}, {data: loads, error: lErr}] = await Promise.all([
+        sb.from('drivers').select('*').order('created_at', {ascending: true}),
+        sb.from('loads').select('*').order('pickup_date', {ascending: true})
+      ]);
+      if(dErr) throw dErr;
+      if(lErr) throw lErr;
+
+      driversContainer.innerHTML = '';
+      if(!drivers || !drivers.length){
+        payrollEmpty.style.display = 'flex';
+        return;
+      }
+      payrollEmpty.style.display = 'none';
+      drivers.forEach(driver=>{
+        const driverLoads = (loads || []).filter(l => l.driver_id === driver.id);
+        driversContainer.appendChild(renderDriverCard(driver, driverLoads));
+      });
+    }catch(err){
+      console.error('Payroll yuklashda xatolik:', err);
+    }
+  }
+
+  function setupPayrollForm(){
+    addDriverForm.addEventListener('submit', async (e)=>{
+      e.preventDefault();
+      const name = document.getElementById('driverName').value.trim();
+      const unit = document.getElementById('driverUnit').value.trim();
+      if(!name) return;
+      try{
+        const {data: userData} = await sb.auth.getUser();
+        const user = userData && userData.user;
+        if(!user) return;
+        const {error} = await sb.from('drivers').insert({
+          user_id: user.id, name, unit_number: unit || null
+        });
+        if(error) throw error;
+        addDriverForm.reset();
+        await refreshPayroll();
+      }catch(err){
+        alert("Haydovchi qo'shishda xatolik: " + (err.message || err));
       }
     });
   }
@@ -1055,16 +1384,29 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     try{
       const {data: userData} = await sb.auth.getUser();
       const user = userData && userData.user;
-      if(!user) return;
-      await sb.from('invoices').insert({
+      if(!user) return null;
+      const {data, error} = await sb.from('invoices').insert({
         user_id: user.id,
         invoice_date: entry.date || null,
         vendor: entry.vendor || null,
         description: entry.description || null,
         amount: entry.amount || null
-      });
+      }).select().single();
+      if(error) throw error;
+      return data ? data.id : null;
     }catch(err){
       console.error('Saqlashda xatolik:', err);
+      return null;
+    }
+  }
+
+  async function updateInvoiceStatus(id, status){
+    if(!id) return;
+    try{
+      const {error} = await sb.from('invoices').update({status}).eq('id', id);
+      if(error) throw error;
+    }catch(err){
+      console.error('Holatni yangilashda xatolik:', err);
     }
   }
 
@@ -1075,6 +1417,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
       if(!data || !data.length) return;
       data.forEach(row=>{
         addInvoiceRow({
+          id: row.id,
           date: row.invoice_date,
           vendor: row.vendor,
           description: row.description,
@@ -1087,21 +1430,36 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     }
   }
 
-  function addInvoiceRow({date, vendor, description, amount, status}, persist = true){
+  async function addInvoiceRow({id, date, vendor, description, amount, status}, persist = true){
     invoicesEmpty.style.display = 'none';
     invoicesTable.style.display = 'table';
-    const statusLabel = status === 'paid' ? 'To\u2019landi' : (status === 'overdue' ? 'Muddati o\u2019tgan' : 'Kutilmoqda');
-    const statusClass = status === 'paid' ? 'paid' : (status === 'overdue' ? 'overdue' : 'pending');
+
+    if(persist){
+      id = await saveInvoice({date, vendor, description, amount});
+    }
+
     const row = document.createElement('tr');
+    if(id) row.dataset.id = id;
     row.innerHTML = `
       <td class="mono">${date || '—'}</td>
       <td>${vendor || 'Aniqlanmadi'}</td>
       <td>${description}</td>
       <td class="mono">${amount ? '$'+amount : '—'}</td>
-      <td><span class="status ${statusClass}">${statusLabel}</span></td>
+      <td>
+        <select class="status-select status ${status === 'paid' ? 'paid' : (status === 'overdue' ? 'overdue' : 'pending')}">
+          <option value="pending" ${status==='paid'||status==='overdue' ? '' : 'selected'}>Kutilmoqda</option>
+          <option value="paid" ${status==='paid' ? 'selected' : ''}>To'landi</option>
+          <option value="overdue" ${status==='overdue' ? 'selected' : ''}>Muddati o'tgan</option>
+        </select>
+      </td>
     `;
     invoiceRows.appendChild(row);
-    if(persist) saveInvoice({date, vendor, description, amount});
+
+    const select = row.querySelector('.status-select');
+    select.addEventListener('change', ()=>{
+      select.className = 'status-select status ' + (select.value === 'paid' ? 'paid' : (select.value === 'overdue' ? 'overdue' : 'pending'));
+      updateInvoiceStatus(row.dataset.id, select.value);
+    });
   }
 
   function addFilesToQueue(fileList){
