@@ -1654,6 +1654,36 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
   }
 
   // ---- extraction helpers ----
+  function guessVendorName(text){
+    // structural phrases: never part of a real company name, filter regardless of length
+    const structuralPhrases = ['DUE ON RECEIPT','BILL TO','SHIP TO','GRAND TOTAL','BALANCE DUE','SCAN TO PAY','TOTAL DUE'];
+    // label words: only disqualify a candidate if it's basically just the label (1-2 words),
+    // since real company names can legitimately contain words like "SERVICE" or "SIGNATURE"
+    const labelWords = [
+      'INVOICE','ESTIMATE','RECEIPT','VEHICLE','TOTAL','SUBTOTAL','PAGE','DATE','INVOICED',
+      'CREATED','TAX','VIN','UNIT','QTY','PRICE','HRS','DESCRIPTION','TYPE','LABOR','PART',
+      'MATL','TIRE','SERVICE','CUSTOMER','SIGNATURE','TERMS','NOTES'
+    ];
+    const billToIdx = text.search(/BILL TO/i);
+    const searchArea = billToIdx > 10 ? text.slice(0, billToIdx) : text.slice(0, 500);
+
+    const candidates = [...searchArea.matchAll(/\b([A-Z][A-Z&.,'-]*(?:\s+[A-Z][A-Z&.,'-]*){1,6})\b/g)]
+      .map(m => m[1].trim())
+      .filter(m=>{
+        const upper = m.toUpperCase();
+        if(structuralPhrases.some(sp => upper.includes(sp))) return false;
+        const wordCount = m.split(/\s+/).length;
+        if(wordCount <= 2 && labelWords.includes(upper)) return false;
+        if(m.replace(/[^A-Z]/g,'').length < 6) return false; // too short to be a real name
+        return true;
+      });
+
+    if(!candidates.length) return null;
+    // the real company name tends to be the longest all-caps run in the letterhead
+    candidates.sort((a,b)=> b.length - a.length);
+    return candidates[0];
+  }
+
   async function extractPdf(file){
     const buf = await file.arrayBuffer();
     const doc = await pdfjsLib.getDocument({data: buf}).promise;
@@ -1674,12 +1704,11 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     }
     const dateMatch = text.match(/\b(\d{1,2}\/\d{1,2}\/\d{2,4})\b/);
     const invMatch = text.match(/\b(INV[-\s]?\d+)\b/i);
-    // heuristic vendor guess: first all-caps run of 2+ words near the start of the doc
-    const vendorMatch = text.match(/\b([A-Z][A-Z&.,]+(?:\s[A-Z][A-Z&.,]+){1,4})\b/);
+    const vendor = guessVendorName(text);
     return {
       amount, date: dateMatch ? dateMatch[1] : null,
       invoiceNo: invMatch ? invMatch[1].toUpperCase() : null,
-      vendor: vendorMatch ? vendorMatch[1].trim() : null,
+      vendor: vendor,
       summary: (()=>{
         const parts = [];
         if(amount) parts.push('$' + amount);
