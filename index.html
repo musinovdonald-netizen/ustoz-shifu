@@ -26,6 +26,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
 <style>
   :root{
     --ink:#14213D;
+    --text:#14213D;
     --paper:#EDEFF2;
     --panel:#FFFFFF;
     --steel:#5C6B7A;
@@ -37,14 +38,23 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     --line:#DBDFE4;
     --radius:10px;
   }
+  html[data-theme="dark"]{
+    --text:#E7EAF0;
+    --paper:#0B1220;
+    --panel:#141B2C;
+    --steel:#92A0B3;
+    --steel-soft:#5C6B7A;
+    --line:#232D42;
+  }
   *{box-sizing:border-box;}
   html,body{margin:0;padding:0;}
   body{
     background:var(--paper);
-    color:var(--ink);
+    color:var(--text);
     font-family:'IBM Plex Sans',sans-serif;
     -webkit-font-smoothing:antialiased;
     min-height:100vh;
+    transition:background .2s ease, color .2s ease;
   }
   .app{
     display:grid;
@@ -160,6 +170,18 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     padding:6px 12px;
     border-radius:20px;
   }
+  .theme-toggle-btn{
+    width:32px; height:32px;
+    display:flex; align-items:center; justify-content:center;
+    border-radius:50%;
+    border:1px solid var(--line);
+    background:var(--panel);
+    color:var(--steel);
+    cursor:pointer;
+    transition:border-color .15s ease, color .15s ease;
+  }
+  .theme-toggle-btn:hover{border-color:var(--amber); color:var(--amber);}
+  .theme-toggle-btn:focus-visible{outline:2px solid var(--amber); outline-offset:1px;}
 
   /* ---------- GAUGE CLUSTER (signature element) ---------- */
   .cluster{
@@ -245,7 +267,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     border-radius:7px;
     border:1px solid var(--line);
     background:var(--panel);
-    color:var(--ink);
+    color:var(--text);
     cursor:pointer;
     transition:border-color .15s ease, background .15s ease;
   }
@@ -384,7 +406,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
   .load-form-row span{font-size:10.5px; color:var(--steel); text-transform:uppercase; letter-spacing:.03em;}
   .load-form-row input{
     font-family:'IBM Plex Sans',sans-serif; font-size:12.5px; padding:7px 8px;
-    border-radius:6px; border:1px solid var(--line); background:var(--panel); color:var(--ink);
+    border-radius:6px; border:1px solid var(--line); background:var(--panel); color:var(--text);
   }
   .load-form-row input:focus-visible{outline:2px solid var(--amber); outline-offset:1px;}
   .load-form-actions{grid-column:1/-1; display:flex; gap:8px; margin-top:2px;}
@@ -418,7 +440,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     display:flex; align-items:center; justify-content:center;
     color:var(--steel);
   }
-  .dropzone-title{font-size:14px; font-weight:500; color:var(--ink);}
+  .dropzone-title{font-size:14px; font-weight:500; color:var(--text);}
   .dropzone-sub{font-size:12.5px; color:var(--steel); margin-top:2px;}
   .file-cell{display:flex; align-items:center; gap:9px;}
   .file-cell svg{flex-shrink:0; color:var(--steel-soft);}
@@ -469,7 +491,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     border-radius:8px;
     border:1px solid var(--line);
     background:var(--paper);
-    color:var(--ink);
+    color:var(--text);
   }
   #loginForm input:focus-visible{outline:2px solid var(--amber); outline-offset:1px; border-color:var(--amber);}
   .lock-submit{width:100%; padding:10px 14px; margin-top:4px;}
@@ -515,7 +537,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     border-radius:8px;
     border:1px solid var(--line);
     background:var(--paper);
-    color:var(--ink);
+    color:var(--text);
   }
   .settings-form input:disabled{color:var(--steel-soft); background:var(--paper);}
   .settings-form input:focus-visible{outline:2px solid var(--amber); outline-offset:1px; border-color:var(--amber);}
@@ -569,7 +591,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     </form>
 
     <p class="lock-note" id="lockToggleWrap">
-      Hisobingiz yo'qmi? <a href="#" id="lockToggle" style="color:var(--ink); font-weight:500;">Ro'yxatdan o'ting</a>
+      Hisobingiz yo'qmi? <a href="#" id="lockToggle" style="color:var(--text); font-weight:500;">Ro'yxatdan o'ting</a>
     </p>
   </div>
 </div>
@@ -640,7 +662,13 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
         <h1>Xush kelibsiz, Donald</h1>
         <p>Hisob-kitob va statementlaringizga umumiy nazar</p>
       </div>
-      <div class="date-chip" id="dateChip"></div>
+      <div style="display:flex; align-items:center; gap:8px;">
+        <button class="theme-toggle-btn" id="themeToggleBtn" type="button" title="Kunduzgi/Tungi rejim">
+          <svg id="themeIconSun" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+          <svg id="themeIconMoon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="display:none;"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        </button>
+        <div class="date-chip" id="dateChip"></div>
+      </div>
     </div>
 
     <!-- Signature gauge cluster -->
@@ -851,6 +879,40 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
 </div>
 
 <script>
+  // ---------- Theme (light/dark) ----------
+  (function(){
+    try{
+      const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+      if(prefersDark) document.documentElement.setAttribute('data-theme','dark');
+    }catch(e){}
+  })();
+
+  function applyThemeIcons(){
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    const sun = document.getElementById('themeIconSun');
+    const moon = document.getElementById('themeIconMoon');
+    if(sun && moon){
+      sun.style.display = isDark ? 'block' : 'none';
+      moon.style.display = isDark ? 'none' : 'block';
+    }
+  }
+
+  function setupThemeToggle(){
+    applyThemeIcons();
+    const btn = document.getElementById('themeToggleBtn');
+    if(!btn || btn._wired) return;
+    btn._wired = true;
+    btn.addEventListener('click', ()=>{
+      const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+      if(isDark){
+        document.documentElement.removeAttribute('data-theme');
+      } else {
+        document.documentElement.setAttribute('data-theme','dark');
+      }
+      applyThemeIcons();
+    });
+  }
+
   // ---------- Supabase connection ----------
   if(!window.supabase){
     document.getElementById('lockError').textContent = "Ulanish kutubxonasi yuklanmadi. Sahifani yangilab qayta urinib ko'ring.";
@@ -914,10 +976,10 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
   function renderToggleText(){
     if(mode === 'signin'){
       loginSubmitBtn.textContent = 'Kirish';
-      lockToggleWrap.innerHTML = 'Hisobingiz yo\'qmi? <a href="#" id="lockToggle" style="color:var(--ink); font-weight:500;">Ro\'yxatdan o\'ting</a>';
+      lockToggleWrap.innerHTML = 'Hisobingiz yo\'qmi? <a href="#" id="lockToggle" style="color:var(--text); font-weight:500;">Ro\'yxatdan o\'ting</a>';
     } else {
       loginSubmitBtn.textContent = "Ro'yxatdan o'tish";
-      lockToggleWrap.innerHTML = 'Hisobingiz bormi? <a href="#" id="lockToggle" style="color:var(--ink); font-weight:500;">Kirish</a>';
+      lockToggleWrap.innerHTML = 'Hisobingiz bormi? <a href="#" id="lockToggle" style="color:var(--text); font-weight:500;">Kirish</a>';
     }
     document.getElementById('lockToggle').addEventListener('click', (e)=>{
       e.preventDefault();
@@ -1003,6 +1065,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     loadSavedInvoices();
     setupSettingsForms();
     setupPayrollForm();
+    setupThemeToggle();
     refreshPayroll();
     initApp._ran = true;
   }
