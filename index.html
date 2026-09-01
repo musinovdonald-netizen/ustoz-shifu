@@ -577,14 +577,14 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     <h1>Ustoz Shifu</h1>
     <p class="lock-sub">Hisob-kitob va statementlar boshqaruvi</p>
 
-    <form id="loginForm">
+    <form id="loginForm" autocomplete="off">
       <label>
         <span>Email</span>
-        <input type="email" id="loginUser" placeholder="donald@fastmoverexpressinc.com" autocomplete="username" required>
+        <input type="email" id="loginUser" placeholder="donald@fastmoverexpressinc.com" autocomplete="off" required>
       </label>
       <label>
         <span>Parol</span>
-        <input type="password" id="loginPass" placeholder="••••••••" autocomplete="current-password" required minlength="6">
+        <input type="password" id="loginPass" placeholder="••••••••" autocomplete="new-password" required minlength="6">
       </label>
       <div class="lock-error" id="lockError"></div>
       <button type="submit" class="btn btn-primary lock-submit" id="loginSubmitBtn">Kirish</button>
