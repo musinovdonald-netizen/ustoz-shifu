@@ -411,6 +411,19 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
   .load-form-row input:focus-visible{outline:2px solid var(--amber); outline-offset:1px;}
   .load-form-actions{grid-column:1/-1; display:flex; gap:8px; margin-top:2px;}
 
+  .inline-edit-input{
+    width:100%;
+    font-family:'IBM Plex Sans',sans-serif;
+    font-size:13px;
+    padding:5px 7px;
+    border-radius:6px;
+    border:1px solid var(--amber);
+    background:var(--panel);
+    color:var(--text);
+  }
+  .inline-edit-input:focus-visible{outline:2px solid var(--amber); outline-offset:1px;}
+  tr.editing{background:rgba(232,162,61,.05);}
+
   /* ---------- Ledger ---------- */
   .ledger-summary{
     display:grid;
@@ -764,7 +777,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
         </div>
         <table id="invoicesTable" style="display:none;">
           <thead>
-            <tr><th>Sana</th><th>Yetkazib beruvchi</th><th>Tavsif</th><th>Summa</th><th>Holat</th></tr>
+            <tr><th>Sana</th><th>Yetkazib beruvchi</th><th>Tavsif</th><th>Summa</th><th>Holat</th><th></th></tr>
           </thead>
           <tbody id="invoiceRows"></tbody>
         </table>
@@ -1228,9 +1241,14 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
           <td class="mono">${fmtNum(l.mileage)}</td>
           <td class="mono">${fmtNum(rowMi)}</td>
           <td class="mono">$${rpm.toFixed(2)}</td>
-          <td><button class="icon-btn delete-load-btn" title="O'chirish" type="button">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>
-          </button></td>
+          <td style="white-space:nowrap;">
+            <button class="icon-btn edit-load-btn" title="Tahrirlash" type="button">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
+            </button>
+            <button class="icon-btn delete-load-btn" title="O'chirish" type="button">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>
+            </button>
+          </td>
         </tr>`;
     }).join('');
 
@@ -1288,41 +1306,77 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
 
     // toggle add-load form
     const loadForm = card.querySelector('.load-form-row');
+    const formSubmitBtn = loadForm.querySelector('button[type="submit"]');
     card.querySelector('.toggle-load-form-btn').addEventListener('click', ()=>{
+      loadForm.reset();
+      delete loadForm.dataset.editLoadId;
+      formSubmitBtn.textContent = 'Saqlash';
       loadForm.style.display = loadForm.style.display === 'none' ? 'grid' : 'none';
     });
     card.querySelector('.cancel-load-btn').addEventListener('click', ()=>{
       loadForm.reset();
+      delete loadForm.dataset.editLoadId;
+      formSubmitBtn.textContent = 'Saqlash';
       loadForm.style.display = 'none';
     });
 
-    // submit new load
+    // submit: insert new load, or update if editing an existing one
     loadForm.addEventListener('submit', async (e)=>{
       e.preventDefault();
       const fd = new FormData(loadForm);
+      const payload = {
+        pickup_date: fd.get('pickup_date') || null,
+        delivery_date: fd.get('delivery_date') || null,
+        broker: fd.get('broker') || null,
+        load_number: fd.get('load_number') || null,
+        from_location: fd.get('from_location') || null,
+        to_location: fd.get('to_location') || null,
+        base_pay: parseFloat(fd.get('base_pay')) || 0,
+        dhd: parseFloat(fd.get('dhd')) || 0,
+        mileage: parseFloat(fd.get('mileage')) || 0
+      };
       try{
-        const {data: userData} = await sb.auth.getUser();
-        const user = userData && userData.user;
-        if(!user) return;
-        const {error} = await sb.from('loads').insert({
-          user_id: user.id,
-          driver_id: driver.id,
-          pickup_date: fd.get('pickup_date') || null,
-          delivery_date: fd.get('delivery_date') || null,
-          broker: fd.get('broker') || null,
-          load_number: fd.get('load_number') || null,
-          from_location: fd.get('from_location') || null,
-          to_location: fd.get('to_location') || null,
-          base_pay: parseFloat(fd.get('base_pay')) || 0,
-          dhd: parseFloat(fd.get('dhd')) || 0,
-          mileage: parseFloat(fd.get('mileage')) || 0
-        });
-        if(error) throw error;
+        const editId = loadForm.dataset.editLoadId;
+        if(editId){
+          const {error} = await sb.from('loads').update(payload).eq('id', editId);
+          if(error) throw error;
+        } else {
+          const {data: userData} = await sb.auth.getUser();
+          const user = userData && userData.user;
+          if(!user) return;
+          const {error} = await sb.from('loads').insert({...payload, user_id: user.id, driver_id: driver.id});
+          if(error) throw error;
+        }
+        delete loadForm.dataset.editLoadId;
+        formSubmitBtn.textContent = 'Saqlash';
         await refreshPayroll();
         refreshLedger();
       }catch(err){
         alert("Yukni saqlashda xatolik: " + (err.message || err));
       }
+    });
+
+    // edit load: prefill the form and switch it into update mode
+    card.querySelectorAll('.edit-load-btn').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const tr = btn.closest('tr');
+        const loadId = tr.dataset.loadId;
+        const l = loads.find(x => String(x.id) === String(loadId));
+        if(!l) return;
+        loadForm.elements['pickup_date'].value = l.pickup_date || '';
+        loadForm.elements['delivery_date'].value = l.delivery_date || '';
+        loadForm.elements['broker'].value = l.broker || '';
+        loadForm.elements['load_number'].value = l.load_number || '';
+        loadForm.elements['from_location'].value = l.from_location || '';
+        loadForm.elements['to_location'].value = l.to_location || '';
+        loadForm.elements['base_pay'].value = l.base_pay || '';
+        loadForm.elements['dhd'].value = l.dhd || '';
+        loadForm.elements['mileage'].value = l.mileage || '';
+        loadForm.dataset.editLoadId = loadId;
+        formSubmitBtn.textContent = 'Yangilash';
+        loadForm.style.display = 'grid';
+        loadForm.scrollIntoView({behavior:'smooth', block:'nearest'});
+      });
     });
 
     // delete load
@@ -1730,17 +1784,26 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
 
     const row = document.createElement('tr');
     if(id) row.dataset.id = id;
+    row.dataset.date = date || '';
+    row.dataset.vendor = vendor || '';
+    row.dataset.description = description || '';
+    row.dataset.amount = amount || '';
     row.innerHTML = `
-      <td class="mono">${date || '—'}</td>
-      <td>${vendor || 'Aniqlanmadi'}</td>
-      <td>${description}</td>
-      <td class="mono">${amount ? '$'+amount : '—'}</td>
+      <td class="mono cell-date">${date || '—'}</td>
+      <td class="cell-vendor">${vendor || 'Aniqlanmadi'}</td>
+      <td class="cell-description">${description}</td>
+      <td class="mono cell-amount">${amount ? '$'+amount : '—'}</td>
       <td>
         <select class="status-select status ${status === 'paid' ? 'paid' : (status === 'overdue' ? 'overdue' : 'pending')}">
           <option value="pending" ${status==='paid'||status==='overdue' ? '' : 'selected'}>Kutilmoqda</option>
           <option value="paid" ${status==='paid' ? 'selected' : ''}>To'landi</option>
           <option value="overdue" ${status==='overdue' ? 'selected' : ''}>Muddati o'tgan</option>
         </select>
+      </td>
+      <td>
+        <button class="icon-btn edit-invoice-btn" title="Tahrirlash" type="button">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
+        </button>
       </td>
     `;
     invoiceRows.appendChild(row);
@@ -1750,6 +1813,91 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
       select.className = 'status-select status ' + (select.value === 'paid' ? 'paid' : (select.value === 'overdue' ? 'overdue' : 'pending'));
       updateInvoiceStatus(row.dataset.id, select.value).then(()=>refreshLedger());
     });
+
+    row.querySelector('.edit-invoice-btn').addEventListener('click', ()=> startEditInvoiceRow(row));
+  }
+
+  function startEditInvoiceRow(row){
+    if(row.classList.contains('editing')) return;
+    row.classList.add('editing');
+    const dateCell = row.querySelector('.cell-date');
+    const vendorCell = row.querySelector('.cell-vendor');
+    const descCell = row.querySelector('.cell-description');
+    const amountCell = row.querySelector('.cell-amount');
+    const editBtn = row.querySelector('.edit-invoice-btn');
+
+    const orig = {
+      date: row.dataset.date, vendor: row.dataset.vendor,
+      description: row.dataset.description, amount: row.dataset.amount
+    };
+
+    dateCell.innerHTML = `<input type="text" class="inline-edit-input" value="${orig.date}" placeholder="MM/DD/YYYY">`;
+    vendorCell.innerHTML = `<input type="text" class="inline-edit-input" value="${orig.vendor}">`;
+    descCell.innerHTML = `<input type="text" class="inline-edit-input" value="${orig.description}">`;
+    amountCell.innerHTML = `<input type="text" class="inline-edit-input" value="${orig.amount}" placeholder="0.00">`;
+
+    editBtn.outerHTML = `
+      <button class="icon-btn save-invoice-btn" title="Saqlash" type="button">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 6L9 17l-5-5"/></svg>
+      </button>
+      <button class="icon-btn cancel-invoice-btn" title="Bekor qilish" type="button">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>
+    `;
+
+    row.querySelector('.cancel-invoice-btn').addEventListener('click', ()=> cancelEditInvoiceRow(row, orig));
+    row.querySelector('.save-invoice-btn').addEventListener('click', ()=> saveEditInvoiceRow(row));
+  }
+
+  function cancelEditInvoiceRow(row, orig){
+    renderInvoiceRowContent(row, orig);
+  }
+
+  async function saveEditInvoiceRow(row){
+    const dateCell = row.querySelector('.cell-date input');
+    const vendorCell = row.querySelector('.cell-vendor input');
+    const descCell = row.querySelector('.cell-description input');
+    const amountCell = row.querySelector('.cell-amount input');
+    const updated = {
+      date: dateCell.value.trim(),
+      vendor: vendorCell.value.trim(),
+      description: descCell.value.trim(),
+      amount: amountCell.value.trim().replace(/^\$/,'')
+    };
+    try{
+      const {error} = await sb.from('invoices').update({
+        invoice_date: updated.date || null,
+        vendor: updated.vendor || null,
+        description: updated.description || null,
+        amount: updated.amount || null
+      }).eq('id', row.dataset.id);
+      if(error) throw error;
+      row.dataset.date = updated.date;
+      row.dataset.vendor = updated.vendor;
+      row.dataset.description = updated.description;
+      row.dataset.amount = updated.amount;
+      renderInvoiceRowContent(row, updated);
+      refreshLedger();
+    }catch(err){
+      alert("Saqlashda xatolik: " + (err.message || err));
+    }
+  }
+
+  function renderInvoiceRowContent(row, {date, vendor, description, amount}){
+    row.classList.remove('editing');
+    row.querySelector('.cell-date').textContent = date || '—';
+    row.querySelector('.cell-vendor').textContent = vendor || 'Aniqlanmadi';
+    row.querySelector('.cell-description').textContent = description || '';
+    row.querySelector('.cell-amount').textContent = amount ? '$'+amount : '—';
+    const actionCell = row.querySelector('.save-invoice-btn') ? row.querySelector('.save-invoice-btn').parentElement : null;
+    if(actionCell){
+      actionCell.innerHTML = `
+        <button class="icon-btn edit-invoice-btn" title="Tahrirlash" type="button">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
+        </button>
+      `;
+      actionCell.querySelector('.edit-invoice-btn').addEventListener('click', ()=> startEditInvoiceRow(row));
+    }
   }
 
   function addFilesToQueue(fileList){
