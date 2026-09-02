@@ -446,26 +446,19 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
   }
   .view-details-link:hover{text-decoration:underline;}
 
-  .company-selector-bar{
-    display:flex;
-    justify-content:space-between;
-    align-items:center;
-    margin-bottom:14px;
-    gap:10px;
-    flex-wrap:wrap;
-  }
   .company-select{
     font-family:'Space Grotesk',sans-serif;
-    font-weight:700;
-    font-size:17px;
+    font-weight:600;
+    font-size:13px;
     color:var(--text);
     background:var(--panel);
     border:1px solid var(--line);
-    border-radius:8px;
-    padding:8px 32px 8px 14px;
+    border-radius:20px;
+    padding:8px 28px 8px 14px;
     cursor:pointer;
     appearance:none;
     -webkit-appearance:none;
+    max-width:160px;
     background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%235C6B7A' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
     background-repeat:no-repeat;
     background-position:right 12px center;
@@ -814,6 +807,8 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
         <p>Hisob-kitob va statementlaringizga umumiy nazar</p>
       </div>
       <div style="display:flex; align-items:center; gap:8px;">
+        <select id="companySelect" class="company-select" title="Kompaniya"></select>
+        <button class="btn" type="button" id="addCompanyBtn" style="padding:8px 10px;" title="Yangi kompaniya">+</button>
         <button class="theme-toggle-btn" id="themeToggleBtn" type="button" title="Kunduzgi/Tungi rejim">
           <svg id="themeIconSun" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
           <svg id="themeIconMoon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="display:none;"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
@@ -821,6 +816,15 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
         <div class="date-chip" id="dateChip"></div>
       </div>
     </div>
+
+    <form id="addCompanyForm" class="settings-form" style="flex-direction:row; align-items:flex-end; max-width:none; display:none; margin:-6px 0 18px;">
+      <label style="flex:1; min-width:180px;">
+        <span>Yangi kompaniya nomi</span>
+        <input type="text" id="companyName" placeholder="E C A Express LLC" required>
+      </label>
+      <button class="btn btn-primary" type="submit">Saqlash</button>
+      <button class="btn" type="button" id="cancelAddCompanyBtn">Bekor qilish</button>
+    </form>
 
     <!-- Signature gauge cluster -->
     <div class="cluster">
@@ -950,21 +954,6 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
 
     <!-- PAYROLL PANEL -->
     <section class="panel" id="panel-payroll">
-      <div class="company-selector-bar">
-        <div class="company-selector-wrap">
-          <select id="companySelect" class="company-select"></select>
-        </div>
-        <button class="btn" type="button" id="addCompanyBtn">+ Yangi kompaniya</button>
-      </div>
-      <form id="addCompanyForm" class="settings-form" style="flex-direction:row; align-items:flex-end; max-width:none; display:none; margin-bottom:14px;">
-        <label style="flex:1; min-width:180px;">
-          <span>Kompaniya nomi</span>
-          <input type="text" id="companyName" placeholder="E C A Express LLC" required>
-        </label>
-        <button class="btn btn-primary" type="submit">Saqlash</button>
-        <button class="btn" type="button" id="cancelAddCompanyBtn">Bekor qilish</button>
-      </form>
-
       <div class="week-banner" id="weekBanner">
         <input type="text" id="weekBannerInput" placeholder="Week #34  period 08/17/26 - 08/23/26" value="">
       </div>
@@ -1310,14 +1299,16 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     document.querySelectorAll('.gauge path[stroke-dasharray]').forEach((p,i)=>{
       setTimeout(()=>{ p.style.transition='stroke-dashoffset .9s cubic-bezier(.4,0,.2,1)'; p.style.strokeDashoffset = 157*0.94; }, 150+i*120);
     });
-    loadSavedInvoices();
     setupSettingsForms();
     setupPayrollForm();
     setupCompanySelector();
     setupThemeToggle();
     setupReportsExport();
-    loadCompanies().then(()=>{ refreshPayroll(); });
-    refreshLedger();
+    loadCompanies().then(()=>{
+      loadSavedInvoices();
+      refreshPayroll();
+      refreshLedger();
+    });
     refreshActivityLog();
     setupStatementViewer();
     refreshStatementsList();
@@ -1684,7 +1675,9 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
       select._wired = true;
       select.addEventListener('change', ()=>{
         selectedCompanyId = select.value || null;
+        loadSavedInvoices();
         refreshPayroll();
+        refreshLedger();
       });
     }
     if(addBtn && !addBtn._wired){
@@ -1716,7 +1709,9 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
           form.style.display = 'none';
           selectedCompanyId = data.id;
           await loadCompanies();
+          loadSavedInvoices();
           refreshPayroll();
+          refreshLedger();
           logActivity('company_add', 'company', name);
         }catch(err){
           alert("Kompaniya qo'shishda xatolik: " + (err.message || err));
@@ -1929,7 +1924,17 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     if(iErr) throw iErr;
     if(dErr) throw dErr;
     if(lErr) throw lErr;
-    return {invoices: invoices || [], drivers: drivers || [], loads: loads || []};
+
+    if(!selectedCompanyId){
+      return {invoices: invoices || [], drivers: drivers || [], loads: loads || []};
+    }
+    const scopedDrivers = (drivers || []).filter(d => d.company_id === selectedCompanyId);
+    const scopedDriverIds = new Set(scopedDrivers.map(d => d.id));
+    return {
+      invoices: (invoices || []).filter(i => i.company_id === selectedCompanyId),
+      drivers: scopedDrivers,
+      loads: (loads || []).filter(l => scopedDriverIds.has(l.driver_id))
+    };
   }
 
   async function refreshLedger(){
@@ -2227,6 +2232,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
       if(!user) return null;
       const {data, error} = await sb.from('invoices').insert({
         user_id: user.id,
+        company_id: selectedCompanyId || null,
         invoice_date: entry.date || null,
         vendor: entry.vendor || null,
         description: entry.description || null,
@@ -2254,11 +2260,18 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
 
   async function loadSavedInvoices(){
     try{
+      invoiceRows.innerHTML = '';
+      invoicesTable.style.display = 'none';
+      invoicesEmpty.style.display = 'flex';
+
       const {data, error} = await sb.from('invoices').select('*').order('created_at', {ascending: true});
       if(error) throw error;
-      if(!data || !data.length) return;
-      data.forEach(row=>{
-        addInvoiceRow({
+      const filtered = selectedCompanyId
+        ? (data || []).filter(row => row.company_id === selectedCompanyId)
+        : (data || []);
+      if(!filtered.length) return;
+      for(const row of filtered){
+        await addInvoiceRow({
           id: row.id,
           date: row.invoice_date,
           vendor: row.vendor,
@@ -2266,7 +2279,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
           amount: row.amount,
           status: row.status
         }, false);
-      });
+      }
     }catch(err){
       console.error('O\u2019qishda xatolik:', err);
     }
