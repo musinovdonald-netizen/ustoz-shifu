@@ -1666,10 +1666,17 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
         return;
       }
       select.innerHTML = data.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
-      if(!selectedCompanyId || !data.find(c=>c.id===selectedCompanyId)){
+
+      let savedCompanyId = null;
+      try{ savedCompanyId = localStorage.getItem('ustoz_selected_company'); }catch(e){}
+
+      if(savedCompanyId && data.find(c=>c.id===savedCompanyId)){
+        selectedCompanyId = savedCompanyId;
+      } else if(!selectedCompanyId || !data.find(c=>c.id===selectedCompanyId)){
         selectedCompanyId = data[0].id;
       }
       select.value = selectedCompanyId;
+      try{ localStorage.setItem('ustoz_selected_company', selectedCompanyId); }catch(e){}
     }catch(err){
       console.error('Kompaniyalarni yuklashda xatolik:', err);
     }
@@ -1684,6 +1691,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
       select._wired = true;
       select.addEventListener('change', ()=>{
         selectedCompanyId = select.value || null;
+        try{ localStorage.setItem('ustoz_selected_company', selectedCompanyId || ''); }catch(e){}
         loadSavedInvoices();
         refreshPayroll();
         refreshLedger();
@@ -2086,14 +2094,25 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     });
   }
   const items = document.querySelectorAll('.nav-item');
+  function switchToPanel(panelName){
+    const item = document.querySelector(`.nav-item[data-panel="${panelName}"]`);
+    const panel = document.getElementById('panel-'+panelName);
+    if(!item || !panel) return false;
+    items.forEach(i=>i.classList.remove('active'));
+    item.classList.add('active');
+    document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+    panel.classList.add('active');
+    try{ localStorage.setItem('ustoz_active_panel', panelName); }catch(e){}
+    return true;
+  }
   items.forEach(item=>{
-    item.addEventListener('click', ()=>{
-      items.forEach(i=>i.classList.remove('active'));
-      item.classList.add('active');
-      document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
-      document.getElementById('panel-'+item.dataset.panel).classList.add('active');
-    });
+    item.addEventListener('click', ()=> switchToPanel(item.dataset.panel));
   });
+  // restore whichever panel was open before the last reload
+  try{
+    const savedPanel = localStorage.getItem('ustoz_active_panel');
+    if(savedPanel) switchToPanel(savedPanel);
+  }catch(e){}
 
   // ---------- Sequential file queue ----------
   const dropzone = document.getElementById('dropzone');
