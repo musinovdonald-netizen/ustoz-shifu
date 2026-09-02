@@ -949,6 +949,21 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
           <button class="btn btn-primary" type="submit">Parolni yangilash</button>
         </form>
       </div>
+
+      <div class="card" style="margin-top:18px;">
+        <div class="card-head"><h2>So'nggi amallar</h2></div>
+        <table>
+          <thead><tr><th>Vaqt</th><th>Amal</th><th>Tafsilot</th></tr></thead>
+          <tbody id="activityLogRows"></tbody>
+        </table>
+        <div class="empty" id="activityLogEmpty">
+          <div class="empty-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="9"/></svg>
+          </div>
+          <h3>Hali amallar yo'q</h3>
+          <p>Hisob-faktura yoki yuk qo'shilgan, tahrirlangan yoki o'chirilgan sayin, bu yerda qayd etilib boradi.</p>
+        </div>
+      </div>
     </section>
 
   </main>
@@ -1145,6 +1160,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     setupReportsExport();
     refreshPayroll();
     refreshLedger();
+    refreshActivityLog();
     initApp._ran = true;
   }
 
@@ -1351,6 +1367,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
         formSubmitBtn.textContent = 'Saqlash';
         await refreshPayroll();
         refreshLedger();
+        logActivity(editId ? 'load_edit' : 'load_add', 'load', `${driver.name} \u2014 ${payload.load_number || ''} ($${payload.base_pay})`);
       }catch(err){
         alert("Yukni saqlashda xatolik: " + (err.message || err));
       }
@@ -1389,6 +1406,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
           await sb.from('loads').delete().eq('id', loadId);
           await refreshPayroll();
         refreshLedger();
+        logActivity('load_delete', 'load', `${driver.name} \u2014 yuk o'chirildi`);
         }catch(err){
           alert("O'chirishda xatolik: " + (err.message || err));
         }
@@ -1402,6 +1420,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
         await sb.from('drivers').delete().eq('id', driver.id);
         await refreshPayroll();
         refreshLedger();
+        logActivity('driver_delete', 'driver', driver.name);
       }catch(err){
         alert("O'chirishda xatolik: " + (err.message || err));
       }
@@ -1451,6 +1470,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
         addDriverForm.reset();
         await refreshPayroll();
         refreshLedger();
+        logActivity('driver_add', 'driver', `${name}${unit ? ' (Unit#'+unit+')' : ''}`);
       }catch(err){
         alert("Haydovchi qo'shishda xatolik: " + (err.message || err));
       }
@@ -1462,6 +1482,56 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     if(v === null || v === undefined) return 0;
     const n = parseFloat(String(v).replace(/,/g,''));
     return isNaN(n) ? 0 : n;
+  }
+
+  // ---------- Activity log ----------
+  async function logActivity(action, entityType, summary){
+    try{
+      const {data: userData} = await sb.auth.getUser();
+      const user = userData && userData.user;
+      if(!user) return;
+      await sb.from('activity_log').insert({
+        user_id: user.id, action, entity_type: entityType, summary
+      });
+      refreshActivityLog();
+    }catch(err){
+      console.error('Amallar tarixini yozishda xatolik:', err);
+    }
+  }
+
+  const activityActionLabels = {
+    invoice_add: "Hisob-faktura qo'shildi",
+    invoice_edit: "Hisob-faktura tahrirlandi",
+    invoice_status: "Holat o'zgartirildi",
+    driver_add: "Haydovchi qo'shildi",
+    driver_delete: "Haydovchi o'chirildi",
+    load_add: "Yuk qo'shildi",
+    load_edit: "Yuk tahrirlandi",
+    load_delete: "Yuk o'chirildi"
+  };
+
+  async function refreshActivityLog(){
+    const rowsEl = document.getElementById('activityLogRows');
+    const emptyEl = document.getElementById('activityLogEmpty');
+    if(!rowsEl) return;
+    try{
+      const {data, error} = await sb.from('activity_log').select('*').order('created_at', {ascending:false}).limit(30);
+      if(error) throw error;
+      if(!data || !data.length){
+        rowsEl.innerHTML = '';
+        emptyEl.style.display = 'flex';
+        return;
+      }
+      emptyEl.style.display = 'none';
+      rowsEl.innerHTML = data.map(entry=>{
+        const dt = new Date(entry.created_at);
+        const timeStr = dt.toLocaleString('uz-UZ', {day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit'});
+        const label = activityActionLabels[entry.action] || entry.action;
+        return `<tr><td class="mono" style="white-space:nowrap;">${timeStr}</td><td>${label}</td><td>${entry.summary || ''}</td></tr>`;
+      }).join('');
+    }catch(err){
+      console.error('Amallar tarixini yuklashda xatolik:', err);
+    }
   }
 
   async function fetchAllData(){
@@ -1777,6 +1847,8 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     try{
       const {error} = await sb.from('invoices').update({status}).eq('id', id);
       if(error) throw error;
+      const label = status==='paid' ? "To'landi" : (status==='overdue' ? "Muddati o'tgan" : 'Kutilmoqda');
+      logActivity('invoice_status', 'invoice', `Yangi holat: ${label}`);
     }catch(err){
       console.error('Holatni yangilashda xatolik:', err);
     }
@@ -1809,6 +1881,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     if(persist){
       id = await saveInvoice({date, vendor, description, amount});
       if(typeof refreshLedger === 'function') refreshLedger();
+      logActivity('invoice_add', 'invoice', `${vendor || 'Noma\u2019lum'} \u2014 ${amount ? '$'+amount : ''}`);
     }
 
     const row = document.createElement('tr');
@@ -1907,6 +1980,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
       row.dataset.amount = updated.amount;
       renderInvoiceRowContent(row, updated);
       refreshLedger();
+      logActivity('invoice_edit', 'invoice', `${updated.vendor || 'Noma\u2019lum'} \u2014 ${updated.amount ? '$'+updated.amount : ''}`);
     }catch(err){
       alert("Saqlashda xatolik: " + (err.message || err));
     }
