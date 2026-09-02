@@ -974,6 +974,20 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
 
       <div class="card" style="margin-bottom:18px;">
         <div class="card-head">
+          <h2>Statement'dan import qilish</h2>
+          <button class="btn btn-primary" type="button" id="openImportPickerBtn">Statement tanlash</button>
+        </div>
+        <div id="importPickerWrap" style="display:none;">
+          <table>
+            <thead><tr><th>Fayl</th><th>Qatorlar</th><th></th></tr></thead>
+            <tbody id="importPickerRows"></tbody>
+          </table>
+        </div>
+        <div id="importResultMsg" class="settings-msg" style="margin:0 18px 14px;"></div>
+      </div>
+
+      <div class="card" style="margin-bottom:18px;">
+        <div class="card-head">
           <h2>Yangi haydovchi</h2>
         </div>
         <form id="addDriverForm" class="settings-form" style="flex-direction:row; align-items:flex-end; max-width:none; flex-wrap:wrap;">
@@ -1310,6 +1324,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     });
     setupSettingsForms();
     setupPayrollForm();
+    setupImportPicker();
     setupCompanySelector();
     setupThemeToggle();
     setupReportsExport();
@@ -1735,6 +1750,231 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
         }
       });
     }
+  }
+
+  // ---------- Import Payroll from a saved Statement ----------
+  function findColIdx(columns, patterns){
+    for(const p of patterns){
+      const idx = columns.findIndex(c => p.test(String(c)));
+      if(idx !== -1) return idx;
+    }
+    return -1;
+  }
+
+  function parseMi(v){
+    if(v === null || v === undefined || v === '') return 0;
+    const n = parseFloat(String(v).replace(/[^0-9.\-]/g,''));
+    return isNaN(n) ? 0 : n;
+  }
+
+  function parseApptDate(v){
+    // handles both native dates from XLSX and "29 Aug 26 18:00 EDT" style text
+    if(!v) return null;
+    if(v instanceof Date) return v;
+    const s = String(v).trim();
+    const parts = s.split(/\s+/);
+    if(parts.length >= 4){
+      const core = parts.slice(0,4).join(' ');
+      const d = new Date(core.replace(/(\d{1,2}) (\w{3}) (\d{2}) (\d{1,2}:\d{2})/, '$2 $1 20$3 $4'));
+      if(!isNaN(d)) return d;
+    }
+    const d2 = new Date(s);
+    return isNaN(d2) ? null : d2;
+  }
+
+  function fmtDateShort(d){
+    if(!d) return null;
+    const mm = String(d.getMonth()+1).padStart(2,'0');
+    const dd = String(d.getDate()).padStart(2,'0');
+    return `${mm}/${dd}/${d.getFullYear()}`;
+  }
+
+  // detects the known multi-row "Trips export" schema (Trip #, Assignees, Assigned Truck, Rate, Empty/Loaded Mi, Appt Date)
+  function tryParseTripsExport(columns, rows){
+    const tripIdx = findColIdx(columns, [/^trip\s*#?$/i]);
+    const assigneeIdx = findColIdx(columns, [/assignee/i]);
+    if(tripIdx === -1 || assigneeIdx === -1) return null;
+
+    const refIdx = findColIdx(columns, [/^ref\s*#?$/i]);
+    const truckIdx = findColIdx(columns, [/assigned\s*truck/i]);
+    const rateIdx = findColIdx(columns, [/rate\s*\(quote\)/i, /^rate$/i]);
+    const emptyMiIdx = findColIdx(columns, [/empty\s*mi/i]);
+    const loadedMiIdx = findColIdx(columns, [/loaded\s*mi/i]);
+    const cityIdx = findColIdx(columns, [/^city$/i]);
+    const stateIdx = findColIdx(columns, [/^state$/i]);
+    const apptIdx = findColIdx(columns, [/appt\s*date/i]);
+
+    const trips = {};
+    rows.forEach(r=>{
+      const tripId = r[tripIdx];
+      if(tripId === '' || tripId === undefined) return;
+      if(!trips[tripId]) trips[tripId] = [];
+      trips[tripId].push(r);
+    });
+
+    const results = [];
+    Object.values(trips).forEach(legs=>{
+      const first = legs[0];
+      const last = legs[legs.length-1];
+      const driverName = legs.map(l=>l[assigneeIdx]).find(v=>v) || null;
+      const truck = legs.map(l=>l[truckIdx]).find(v=>v) || '';
+      const ref = legs.map(l=>l[refIdx]).find(v=>v) || '';
+      const rate = legs.reduce((s,l)=>s+parseMi(l[rateIdx]),0);
+      const empty = legs.reduce((s,l)=>s+parseMi(l[emptyMiIdx]),0);
+      const loaded = legs.reduce((s,l)=>s+parseMi(l[loadedMiIdx]),0);
+      if(!driverName || (empty+loaded) <= 0) return; // skip driverless / canceled zero-mileage legs
+      results.push({
+        driverName: String(driverName).trim(),
+        unit: String(truck).replace(/\.0$/,'').trim(),
+        pickup_date: fmtDateShort(parseApptDate(first[apptIdx])),
+        delivery_date: fmtDateShort(parseApptDate(last[apptIdx])),
+        broker: null,
+        load_number: String(ref).trim(),
+        from_location: cityIdx!==-1 ? `${first[cityIdx]||''}, ${first[stateIdx]||''}`.replace(/^, |, $/,'') : '',
+        to_location: cityIdx!==-1 ? `${last[cityIdx]||''}, ${last[stateIdx]||''}`.replace(/^, |, $/,'') : '',
+        base_pay: rate, dhd: empty, mileage: loaded
+      });
+    });
+    return results;
+  }
+
+  // detects a "direct" one-row-per-load statement whose columns already match our Payroll fields
+  function tryParseDirectRows(columns, rows){
+    const driverIdx = findColIdx(columns, [/driver/i, /haydovchi/i]);
+    const unitIdx = findColIdx(columns, [/unit\s*#?$/i, /truck\s*#?$/i]);
+    const pickupIdx = findColIdx(columns, [/pick\s*up/i]);
+    const deliveryIdx = findColIdx(columns, [/deliver/i]);
+    const brokerIdx = findColIdx(columns, [/broker/i]);
+    const loadIdx = findColIdx(columns, [/load\s*(id)?\s*#?$/i]);
+    const fromIdx = findColIdx(columns, [/^from$/i]);
+    const toIdx = findColIdx(columns, [/^to$/i]);
+    const payIdx = findColIdx(columns, [/base\s*pay/i, /^rate$/i]);
+    const dhdIdx = findColIdx(columns, [/^dhd$/i]);
+    const mileageIdx = findColIdx(columns, [/^mileage$/i, /loaded\s*mi/i]);
+
+    if(driverIdx === -1 || payIdx === -1) return null;
+
+    return rows.filter(r=>r[driverIdx]).map(r=>({
+      driverName: String(r[driverIdx]).trim(),
+      unit: unitIdx!==-1 ? String(r[unitIdx]||'').trim() : '',
+      pickup_date: pickupIdx!==-1 ? String(r[pickupIdx]||'') : null,
+      delivery_date: deliveryIdx!==-1 ? String(r[deliveryIdx]||'') : null,
+      broker: brokerIdx!==-1 ? String(r[brokerIdx]||'') : null,
+      load_number: loadIdx!==-1 ? String(r[loadIdx]||'') : '',
+      from_location: fromIdx!==-1 ? String(r[fromIdx]||'') : '',
+      to_location: toIdx!==-1 ? String(r[toIdx]||'') : '',
+      base_pay: parseMi(r[payIdx]),
+      dhd: dhdIdx!==-1 ? parseMi(r[dhdIdx]) : 0,
+      mileage: mileageIdx!==-1 ? parseMi(r[mileageIdx]) : 0
+    }));
+  }
+
+  async function findOrCreateDriverByName(name, unit, existingDrivers, companyId, userId){
+    const norm = name.trim().toLowerCase();
+    let driver = existingDrivers.find(d => d.name.trim().toLowerCase() === norm);
+    if(driver) return driver;
+    const {data, error} = await sb.from('drivers').insert({
+      user_id: userId, name: name.trim(), unit_number: unit || null, company_id: companyId || null
+    }).select().single();
+    if(error) throw error;
+    existingDrivers.push(data);
+    return data;
+  }
+
+  async function importStatementIntoPayroll(statementId){
+    const msgEl = document.getElementById('importResultMsg');
+    msgEl.className = 'settings-msg';
+    try{
+      const {data: stmt, error} = await sb.from('statements').select('*').eq('id', statementId).single();
+      if(error) throw error;
+      const columns = stmt.columns || [];
+      const rows = stmt.rows || [];
+
+      let parsed = tryParseTripsExport(columns, rows);
+      if(!parsed) parsed = tryParseDirectRows(columns, rows);
+      if(!parsed || !parsed.length){
+        msgEl.textContent = "Ustunlar tanib olinmadi \u2014 bu statement formatidan avtomatik import qilib bo'lmadi.";
+        msgEl.classList.add('show','err');
+        return;
+      }
+
+      const {data: userData} = await sb.auth.getUser();
+      const user = userData && userData.user;
+      if(!user) return;
+
+      const {data: existingDrivers} = await sb.from('drivers').select('*');
+      const driverPool = existingDrivers || [];
+
+      let driverCount = 0, loadCount = 0;
+      const seenNames = new Set();
+      for(const item of parsed){
+        if(!item.driverName) continue;
+        const driver = await findOrCreateDriverByName(item.driverName, item.unit, driverPool, selectedCompanyId, user.id);
+        if(!seenNames.has(driver.id)){ seenNames.add(driver.id); driverCount++; }
+        const {error: insErr} = await sb.from('loads').insert({
+          user_id: user.id,
+          driver_id: driver.id,
+          pickup_date: item.pickup_date || null,
+          delivery_date: item.delivery_date || null,
+          broker: item.broker || null,
+          load_number: item.load_number || null,
+          from_location: item.from_location || null,
+          to_location: item.to_location || null,
+          base_pay: item.base_pay || 0,
+          dhd: item.dhd || 0,
+          mileage: item.mileage || 0
+        });
+        if(!insErr) loadCount++;
+      }
+
+      msgEl.textContent = `Import tugadi: ${driverCount} haydovchi, ${loadCount} yuk qo'shildi.`;
+      msgEl.classList.add('show','ok');
+      logActivity('statement_import', 'statement', `${stmt.file_name} \u2014 ${loadCount} yuk`);
+      await refreshPayroll();
+      refreshLedger();
+    }catch(err){
+      msgEl.textContent = "Import qilishda xatolik: " + (err.message || err);
+      msgEl.classList.add('show','err');
+    }
+  }
+
+  async function loadImportPicker(){
+    const wrap = document.getElementById('importPickerWrap');
+    const rowsEl = document.getElementById('importPickerRows');
+    try{
+      const {data, error} = await sb.from('statements').select('id,file_name,row_count').order('created_at', {ascending:false});
+      if(error) throw error;
+      if(!data || !data.length){
+        rowsEl.innerHTML = `<tr><td colspan="3" style="color:var(--steel);">Hujjatlar bo'limida hali statement yo'q.</td></tr>`;
+      } else {
+        rowsEl.innerHTML = data.map(s=>`
+          <tr>
+            <td>${s.file_name}</td>
+            <td class="mono">${s.row_count}</td>
+            <td><button class="btn btn-primary import-pick-btn" type="button" data-statement-id="${s.id}" style="padding:6px 12px; font-size:12.5px;">Import qilish</button></td>
+          </tr>`).join('');
+        rowsEl.querySelectorAll('.import-pick-btn').forEach(btn=>{
+          btn.addEventListener('click', ()=> importStatementIntoPayroll(btn.dataset.statementId));
+        });
+      }
+      wrap.style.display = 'block';
+    }catch(err){
+      console.error('Statement ro\u2019yxatini yuklashda xatolik:', err);
+    }
+  }
+
+  function setupImportPicker(){
+    const btn = document.getElementById('openImportPickerBtn');
+    if(!btn || btn._wired) return;
+    btn._wired = true;
+    btn.addEventListener('click', ()=>{
+      const wrap = document.getElementById('importPickerWrap');
+      if(wrap.style.display === 'none'){
+        loadImportPicker();
+      } else {
+        wrap.style.display = 'none';
+      }
+    });
   }
 
   function setupPayrollForm(){
