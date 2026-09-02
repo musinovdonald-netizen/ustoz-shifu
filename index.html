@@ -445,6 +445,32 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     padding:4px 0; white-space:nowrap;
   }
   .view-details-link:hover{text-decoration:underline;}
+
+  .company-selector-bar{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    margin-bottom:14px;
+    gap:10px;
+    flex-wrap:wrap;
+  }
+  .company-select{
+    font-family:'Space Grotesk',sans-serif;
+    font-weight:700;
+    font-size:17px;
+    color:var(--text);
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:8px;
+    padding:8px 32px 8px 14px;
+    cursor:pointer;
+    appearance:none;
+    -webkit-appearance:none;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%235C6B7A' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat:no-repeat;
+    background-position:right 12px center;
+  }
+  .company-select:focus-visible{outline:2px solid var(--amber); outline-offset:1px;}
   .icon-btn{
     background:none; border:none; cursor:pointer; color:var(--steel-soft);
     padding:4px; border-radius:5px; display:flex;
@@ -924,6 +950,21 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
 
     <!-- PAYROLL PANEL -->
     <section class="panel" id="panel-payroll">
+      <div class="company-selector-bar">
+        <div class="company-selector-wrap">
+          <select id="companySelect" class="company-select"></select>
+        </div>
+        <button class="btn" type="button" id="addCompanyBtn">+ Yangi kompaniya</button>
+      </div>
+      <form id="addCompanyForm" class="settings-form" style="flex-direction:row; align-items:flex-end; max-width:none; display:none; margin-bottom:14px;">
+        <label style="flex:1; min-width:180px;">
+          <span>Kompaniya nomi</span>
+          <input type="text" id="companyName" placeholder="E C A Express LLC" required>
+        </label>
+        <button class="btn btn-primary" type="submit">Saqlash</button>
+        <button class="btn" type="button" id="cancelAddCompanyBtn">Bekor qilish</button>
+      </form>
+
       <div class="week-banner" id="weekBanner">
         <input type="text" id="weekBannerInput" placeholder="Week #34  period 08/17/26 - 08/23/26" value="">
       </div>
@@ -1272,9 +1313,10 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     loadSavedInvoices();
     setupSettingsForms();
     setupPayrollForm();
+    setupCompanySelector();
     setupThemeToggle();
     setupReportsExport();
-    refreshPayroll();
+    loadCompanies().then(()=>{ refreshPayroll(); });
     refreshLedger();
     refreshActivityLog();
     setupStatementViewer();
@@ -1549,12 +1591,16 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
 
   async function refreshPayroll(){
     try{
-      const [{data: drivers, error: dErr}, {data: loads, error: lErr}] = await Promise.all([
+      const [{data: allDrivers, error: dErr}, {data: loads, error: lErr}] = await Promise.all([
         sb.from('drivers').select('*').order('created_at', {ascending: true}),
         sb.from('loads').select('*').order('pickup_date', {ascending: true})
       ]);
       if(dErr) throw dErr;
       if(lErr) throw lErr;
+
+      const drivers = selectedCompanyId
+        ? (allDrivers || []).filter(d => d.company_id === selectedCompanyId)
+        : (allDrivers || []);
 
       const summaryRows = document.getElementById('payrollSummaryRows');
       const summaryCard = document.getElementById('payrollSummaryCard');
@@ -1605,18 +1651,96 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     }
   }
 
+  // ---------- Companies ----------
+  let selectedCompanyId = null;
+
+  async function loadCompanies(){
+    try{
+      const {data, error} = await sb.from('companies').select('*').order('created_at', {ascending:true});
+      if(error) throw error;
+      const select = document.getElementById('companySelect');
+      if(!select) return;
+      if(!data || !data.length){
+        select.innerHTML = `<option value="">Kompaniya yo'q</option>`;
+        selectedCompanyId = null;
+        return;
+      }
+      select.innerHTML = data.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
+      if(!selectedCompanyId || !data.find(c=>c.id===selectedCompanyId)){
+        selectedCompanyId = data[0].id;
+      }
+      select.value = selectedCompanyId;
+    }catch(err){
+      console.error('Kompaniyalarni yuklashda xatolik:', err);
+    }
+  }
+
+  function setupCompanySelector(){
+    const select = document.getElementById('companySelect');
+    const addBtn = document.getElementById('addCompanyBtn');
+    const form = document.getElementById('addCompanyForm');
+    const cancelBtn = document.getElementById('cancelAddCompanyBtn');
+    if(select && !select._wired){
+      select._wired = true;
+      select.addEventListener('change', ()=>{
+        selectedCompanyId = select.value || null;
+        refreshPayroll();
+      });
+    }
+    if(addBtn && !addBtn._wired){
+      addBtn._wired = true;
+      addBtn.addEventListener('click', ()=>{
+        form.style.display = form.style.display === 'none' ? 'flex' : 'none';
+      });
+    }
+    if(cancelBtn && !cancelBtn._wired){
+      cancelBtn._wired = true;
+      cancelBtn.addEventListener('click', ()=>{
+        form.reset();
+        form.style.display = 'none';
+      });
+    }
+    if(form && !form._wired){
+      form._wired = true;
+      form.addEventListener('submit', async (e)=>{
+        e.preventDefault();
+        const name = document.getElementById('companyName').value.trim();
+        if(!name) return;
+        try{
+          const {data: userData} = await sb.auth.getUser();
+          const user = userData && userData.user;
+          if(!user) return;
+          const {data, error} = await sb.from('companies').insert({user_id: user.id, name}).select().single();
+          if(error) throw error;
+          form.reset();
+          form.style.display = 'none';
+          selectedCompanyId = data.id;
+          await loadCompanies();
+          refreshPayroll();
+          logActivity('company_add', 'company', name);
+        }catch(err){
+          alert("Kompaniya qo'shishda xatolik: " + (err.message || err));
+        }
+      });
+    }
+  }
+
   function setupPayrollForm(){
     addDriverForm.addEventListener('submit', async (e)=>{
       e.preventDefault();
       const name = document.getElementById('driverName').value.trim();
       const unit = document.getElementById('driverUnit').value.trim();
       if(!name) return;
+      if(!selectedCompanyId){
+        alert("Avval kompaniya tanlang yoki yangi kompaniya qo'shing.");
+        return;
+      }
       try{
         const {data: userData} = await sb.auth.getUser();
         const user = userData && userData.user;
         if(!user) return;
         const {error} = await sb.from('drivers').insert({
-          user_id: user.id, name, unit_number: unit || null
+          user_id: user.id, name, unit_number: unit || null, company_id: selectedCompanyId
         });
         if(error) throw error;
         addDriverForm.reset();
