@@ -1166,24 +1166,33 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     window.WebSocket = function(){ throw new Error('WebSocket not available in this preview'); };
   }
 
-  // This sandbox does not allow localStorage/sessionStorage, and Supabase's
-  // client tries to use it by default for session storage. Give it a plain
-  // in-memory adapter instead so createClient() never touches real storage.
-  const memoryAuthStorage = (() => {
-    let store = {};
-    return {
-      getItem: (key) => Promise.resolve(key in store ? store[key] : null),
-      setItem: (key, value) => { store[key] = value; return Promise.resolve(); },
-      removeItem: (key) => { delete store[key]; return Promise.resolve(); }
-    };
-  })();
+  // Prefer the browser's real localStorage so a session survives page
+  // reloads on the live site. Only fall back to an in-memory adapter when
+  // localStorage is actually blocked (e.g. inside a sandboxed preview
+  // iframe without storage access) — checked here, not assumed.
+  function detectAuthStorage(){
+    try{
+      const testKey = '__ustoz_shifu_storage_test__';
+      window.localStorage.setItem(testKey, '1');
+      window.localStorage.removeItem(testKey);
+      return window.localStorage;
+    }catch(e){
+      let store = {};
+      return {
+        getItem: (key) => (key in store ? store[key] : null),
+        setItem: (key, value) => { store[key] = value; },
+        removeItem: (key) => { delete store[key]; }
+      };
+    }
+  }
+  const authStorage = detectAuthStorage();
 
   let sb = null;
   try{
     if(window.supabase){
       sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
         auth: {
-          storage: memoryAuthStorage,
+          storage: authStorage,
           persistSession: true,
           autoRefreshToken: true,
           detectSessionInUrl: false
