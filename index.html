@@ -914,6 +914,31 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
           <p>Invoice, statement va boshqa fayllarni yuqoridan yuklab, tartibda saqlashingiz mumkin.</p>
         </div>
       </div>
+
+      <div class="card" style="margin-top:18px;">
+        <div class="card-head"><h2>Saqlangan statementlar</h2></div>
+        <table>
+          <thead><tr><th>Fayl</th><th>Varaq</th><th>Qatorlar</th><th>Yuklangan</th><th></th></tr></thead>
+          <tbody id="statementsListRows"></tbody>
+        </table>
+        <div class="empty" id="statementsListEmpty">
+          <div class="empty-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 4h16v16H4z"/><path d="M4 10h16M10 10v10"/></svg>
+          </div>
+          <h3>Hali statement saqlanmagan</h3>
+          <p>Excel yoki CSV fayl yuklaganingizda, u shu yerda saqlanadi va istalgan vaqt ko'rishingiz mumkin.</p>
+        </div>
+      </div>
+
+      <div class="card" id="statementViewerCard" style="display:none; margin-top:18px;">
+        <div class="card-head">
+          <h2 id="statementViewerTitle">Statement</h2>
+          <button class="btn" type="button" id="closeStatementViewerBtn">Yopish</button>
+        </div>
+        <div class="loads-table-wrap">
+          <table class="loads-table" id="statementViewerTable"></table>
+        </div>
+      </div>
     </section>
 
     <!-- SETTINGS PANEL -->
@@ -1161,6 +1186,8 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     refreshPayroll();
     refreshLedger();
     refreshActivityLog();
+    setupStatementViewer();
+    refreshStatementsList();
     initApp._ran = true;
   }
 
@@ -1534,6 +1561,116 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     }
   }
 
+  // ---------- Statements (saved CSV/XLSX table data) ----------
+  async function saveStatement(fileName, sheetName, columns, rows){
+    try{
+      const {data: userData} = await sb.auth.getUser();
+      const user = userData && userData.user;
+      if(!user) return;
+      const {error} = await sb.from('statements').insert({
+        user_id: user.id,
+        file_name: fileName,
+        sheet_name: sheetName,
+        columns: columns,
+        rows: rows,
+        row_count: rows.length
+      });
+      if(error) throw error;
+      logActivity('statement_add', 'statement', `${fileName} \u2014 ${rows.length} qator`);
+      refreshStatementsList();
+    }catch(err){
+      console.error('Statementni saqlashda xatolik:', err);
+    }
+  }
+
+  async function refreshStatementsList(){
+    const rowsEl = document.getElementById('statementsListRows');
+    const emptyEl = document.getElementById('statementsListEmpty');
+    if(!rowsEl) return;
+    try{
+      const {data, error} = await sb.from('statements').select('id,file_name,sheet_name,row_count,created_at').order('created_at', {ascending:false});
+      if(error) throw error;
+      if(!data || !data.length){
+        rowsEl.innerHTML = '';
+        emptyEl.style.display = 'flex';
+        return;
+      }
+      emptyEl.style.display = 'none';
+      rowsEl.innerHTML = data.map(s=>{
+        const dt = new Date(s.created_at);
+        const dateStr = dt.toLocaleDateString('uz-UZ', {day:'2-digit', month:'2-digit', year:'numeric'});
+        return `
+          <tr data-statement-id="${s.id}">
+            <td>${s.file_name}</td>
+            <td>${s.sheet_name || '—'}</td>
+            <td class="mono">${s.row_count}</td>
+            <td class="mono">${dateStr}</td>
+            <td style="white-space:nowrap;">
+              <button class="icon-btn view-statement-btn" title="Ko'rish" type="button">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>
+              </button>
+              <button class="icon-btn delete-statement-btn" title="O'chirish" type="button">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>
+              </button>
+            </td>
+          </tr>`;
+      }).join('');
+
+      rowsEl.querySelectorAll('.view-statement-btn').forEach(btn=>{
+        btn.addEventListener('click', ()=>{
+          const id = btn.closest('tr').dataset.statementId;
+          viewStatement(id);
+        });
+      });
+      rowsEl.querySelectorAll('.delete-statement-btn').forEach(btn=>{
+        btn.addEventListener('click', async ()=>{
+          const id = btn.closest('tr').dataset.statementId;
+          if(!confirm("Bu statementni o'chirasizmi?")) return;
+          try{
+            await sb.from('statements').delete().eq('id', id);
+            document.getElementById('statementViewerCard').style.display = 'none';
+            refreshStatementsList();
+          }catch(err){
+            alert("O'chirishda xatolik: " + (err.message || err));
+          }
+        });
+      });
+    }catch(err){
+      console.error('Statementlar ro\u2019yxatini yuklashda xatolik:', err);
+    }
+  }
+
+  async function viewStatement(id){
+    try{
+      const {data, error} = await sb.from('statements').select('*').eq('id', id).single();
+      if(error) throw error;
+      const card = document.getElementById('statementViewerCard');
+      const title = document.getElementById('statementViewerTitle');
+      const table = document.getElementById('statementViewerTable');
+      title.textContent = data.file_name + (data.sheet_name ? ` \u2014 ${data.sheet_name}` : '');
+
+      const cols = data.columns || [];
+      const rows = data.rows || [];
+      const thead = `<thead><tr>${cols.map(c=>`<th>${c}</th>`).join('')}</tr></thead>`;
+      const tbody = `<tbody>${rows.map(r=>`<tr>${cols.map((_,i)=>`<td>${r[i] ?? ''}</td>`).join('')}</tr>`).join('')}</tbody>`;
+      table.innerHTML = thead + tbody;
+
+      card.style.display = 'block';
+      card.scrollIntoView({behavior:'smooth', block:'start'});
+    }catch(err){
+      alert("Statementni ochishda xatolik: " + (err.message || err));
+    }
+  }
+
+  function setupStatementViewer(){
+    const btn = document.getElementById('closeStatementViewerBtn');
+    if(!btn || btn._wired) return;
+    btn._wired = true;
+    btn.addEventListener('click', ()=>{
+      document.getElementById('statementViewerCard').style.display = 'none';
+    });
+  }
+
   async function fetchAllData(){
     const [{data: invoices, error: iErr}, {data: drivers, error: dErr}, {data: loads, error: lErr}] = await Promise.all([
       sb.from('invoices').select('*'),
@@ -1792,7 +1929,13 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     const text = await file.text();
     const parsed = Papa.parse(text.trim(), {header:false});
     const rows = parsed.data.filter(r=>r.length && r.some(c=>String(c).trim()!==''));
-    return rows.length ? `${rows.length} qator · ${rows[0].length} ustun` : 'Bo\u2019sh fayl';
+    if(!rows.length) return {summary: 'Bo\u2019sh fayl', columns: null, rows: null};
+    const columns = rows[0].map(c => String(c));
+    const dataRows = rows.slice(1);
+    return {
+      summary: `${dataRows.length} qator \u00b7 ${columns.length} ustun`,
+      columns, rows: dataRows, sheetName: null
+    };
   }
 
   async function extractXlsx(file){
@@ -1800,16 +1943,22 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     const wb = XLSX.read(buf, {type:'array'});
     const sheetName = wb.SheetNames[0];
     const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], {header:1});
-    const nonEmpty = rows.filter(r=>r.length);
-    return `"${sheetName}" · ${nonEmpty.length} qator`;
+    const nonEmpty = rows.filter(r=>r && r.length);
+    if(!nonEmpty.length) return {summary: 'Bo\u2019sh fayl', columns: null, rows: null, sheetName};
+    const columns = nonEmpty[0].map(c => String(c ?? ''));
+    const dataRows = nonEmpty.slice(1).map(r => columns.map((_,i)=> r[i] ?? ''));
+    return {
+      summary: `"${sheetName}" \u00b7 ${dataRows.length} qator`,
+      columns, rows: dataRows, sheetName
+    };
   }
 
   async function extractFile(file){
     const ext = file.name.split('.').pop().toLowerCase();
     try{
       if(ext === 'pdf') return await extractPdf(file);
-      if(ext === 'csv') return {summary: await extractCsv(file)};
-      if(ext === 'xlsx' || ext === 'xls') return {summary: await extractXlsx(file)};
+      if(ext === 'csv') return await extractCsv(file);
+      if(ext === 'xlsx' || ext === 'xls') return await extractXlsx(file);
       if(['jpg','jpeg','png'].includes(ext)) return {summary: 'Saqlandi — matn tanib olish keyingi bosqichda qo\u2019shiladi'};
       return {summary: 'Qo\u2019llab-quvvatlanmaydi'};
     }catch(err){
@@ -2043,6 +2192,11 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
           description: result.invoiceNo || file.name.replace(/\.[^/.]+$/, ''),
           amount: result.amount
         });
+      }
+
+      // CSV/XLSX table data gets saved as a viewable statement
+      if((ext === 'csv' || ext === 'xlsx' || ext === 'xls') && result.columns && result.rows){
+        saveStatement(file.name, result.sheetName, result.columns, result.rows);
       }
 
       i++;
