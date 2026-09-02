@@ -423,6 +423,28 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     background:#2A3345 !important;
     color:var(--text) !important;
   }
+
+  table.payroll-summary-table tbody tr:nth-child(even){background:var(--paper);}
+  table.payroll-summary-table tbody tr:hover{background:rgba(232,162,61,.06);}
+  .truck-badge{
+    display:inline-block;
+    font-family:'IBM Plex Mono',monospace;
+    font-weight:600;
+    font-size:12px;
+    color:#1E6FBE;
+    background:rgba(41,171,226,.12);
+    border-radius:5px;
+    padding:2px 8px;
+  }
+  .summary-driver-name{font-weight:600;}
+  .summary-earning{font-weight:600; color:var(--route-green);}
+  .summary-rate-sub{display:block; font-size:11px; color:var(--steel); font-weight:400;}
+  .view-details-link{
+    background:none; border:none; cursor:pointer;
+    color:var(--amber); font-size:12.5px; font-weight:500;
+    padding:4px 0; white-space:nowrap;
+  }
+  .view-details-link:hover{text-decoration:underline;}
   .icon-btn{
     background:none; border:none; cursor:pointer; color:var(--steel-soft);
     padding:4px; border-radius:5px; display:flex;
@@ -904,6 +926,20 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     <section class="panel" id="panel-payroll">
       <div class="week-banner" id="weekBanner">
         <input type="text" id="weekBannerInput" placeholder="Week #34  period 08/17/26 - 08/23/26" value="">
+      </div>
+
+      <div class="card" style="margin-bottom:18px;" id="payrollSummaryCard">
+        <div class="card-head"><h2>Haydovchilar bo'yicha xulosa</h2></div>
+        <div class="loads-table-wrap">
+          <table class="loads-table payroll-summary-table">
+            <thead>
+              <tr>
+                <th>Haydovchi</th><th>Truck #</th><th>Trips Mileage</th><th>Trip Rate</th><th>Earning</th><th>Payout</th><th></th>
+              </tr>
+            </thead>
+            <tbody id="payrollSummaryRows"></tbody>
+          </table>
+        </div>
       </div>
 
       <div class="card" style="margin-bottom:18px;">
@@ -1520,12 +1556,46 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
       if(dErr) throw dErr;
       if(lErr) throw lErr;
 
+      const summaryRows = document.getElementById('payrollSummaryRows');
+      const summaryCard = document.getElementById('payrollSummaryCard');
+
       driversContainer.innerHTML = '';
       if(!drivers || !drivers.length){
         payrollEmpty.style.display = 'flex';
+        if(summaryCard) summaryCard.style.display = 'none';
+        if(summaryRows) summaryRows.innerHTML = '';
         return;
       }
       payrollEmpty.style.display = 'none';
+      if(summaryCard) summaryCard.style.display = 'block';
+
+      if(summaryRows){
+        summaryRows.innerHTML = drivers.map(driver=>{
+          const dLoads = (loads || []).filter(l => l.driver_id === driver.id);
+          const pay = dLoads.reduce((s,l)=>s+Number(l.base_pay||0),0);
+          const mi = dLoads.reduce((s,l)=>s+Number(l.mileage||0),0);
+          const dhd = dLoads.reduce((s,l)=>s+Number(l.dhd||0),0);
+          const rpm = calcRpm(pay, mi, dhd);
+          return `
+            <tr>
+              <td class="summary-driver-name">${driver.name}</td>
+              <td>${driver.unit_number ? `<span class="truck-badge">${driver.unit_number}</span>` : '—'}</td>
+              <td class="mono">${fmtNum(mi + dhd)} mi</td>
+              <td class="mono">$${rpm.toFixed(2)}/mi</td>
+              <td class="mono summary-earning">${fmtMoney(pay)}</td>
+              <td class="mono summary-earning">${fmtMoney(pay)}</td>
+              <td><button class="view-details-link" type="button" data-scroll-driver="${driver.id}">Batafsil \u2192</button></td>
+            </tr>`;
+        }).join('');
+
+        summaryRows.querySelectorAll('[data-scroll-driver]').forEach(btn=>{
+          btn.addEventListener('click', ()=>{
+            const target = driversContainer.querySelector(`[data-driver-id="${btn.dataset.scrollDriver}"]`);
+            if(target) target.scrollIntoView({behavior:'smooth', block:'start'});
+          });
+        });
+      }
+
       drivers.forEach(driver=>{
         const driverLoads = (loads || []).filter(l => l.driver_id === driver.id);
         driversContainer.appendChild(renderDriverCard(driver, driverLoads));
