@@ -1019,7 +1019,10 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
       <div class="card" style="margin-bottom:18px;">
         <div class="card-head">
           <h2>Statement'dan import qilish</h2>
-          <button class="btn btn-primary" type="button" id="openImportPickerBtn">Statement tanlash</button>
+          <div style="display:flex; gap:8px;">
+            <button class="btn" type="button" id="mergeDuplicatesBtn">Duplikatlarni birlashtirish</button>
+            <button class="btn btn-primary" type="button" id="openImportPickerBtn">Statement tanlash</button>
+          </div>
         </div>
         <div id="importPickerWrap" style="display:none;">
           <table>
@@ -1027,6 +1030,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
             <tbody id="importPickerRows"></tbody>
           </table>
         </div>
+        <div id="mergeDuplicatesMsg" class="settings-msg" style="margin:14px 18px 0;"></div>
         <div id="importResultMsg" class="settings-msg" style="margin:0 18px 14px;"></div>
       </div>
 
@@ -2150,7 +2154,18 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
             <td><button class="btn btn-primary import-pick-btn" type="button" data-statement-id="${s.id}" style="padding:6px 12px; font-size:12.5px;">Import qilish</button></td>
           </tr>`).join('');
         rowsEl.querySelectorAll('.import-pick-btn').forEach(btn=>{
-          btn.addEventListener('click', ()=> importStatementIntoPayroll(btn.dataset.statementId));
+          btn.addEventListener('click', async ()=>{
+            if(btn.disabled) return;
+            btn.disabled = true;
+            const original = btn.textContent;
+            btn.textContent = 'Import qilinmoqda...';
+            try{
+              await importStatementIntoPayroll(btn.dataset.statementId);
+            } finally {
+              btn.disabled = false;
+              btn.textContent = original;
+            }
+          });
         });
       }
       wrap.style.display = 'block';
@@ -2215,18 +2230,94 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     }
   }
 
+  async function mergeDuplicateDrivers(){
+    const btn = document.getElementById('mergeDuplicatesBtn');
+    const msgEl = document.getElementById('mergeDuplicatesMsg');
+    if(btn) btn.disabled = true;
+    msgEl.className = 'settings-msg';
+    try{
+      const {data: allDrivers, error} = await sb.from('drivers').select('*');
+      if(error) throw error;
+      const scoped = selectedCompanyId
+        ? (allDrivers || []).filter(d => d.company_id === selectedCompanyId)
+        : (allDrivers || []);
+
+      const groups = {};
+      scoped.forEach(d=>{
+        const key = d.name.trim().toLowerCase();
+        if(!groups[key]) groups[key] = [];
+        groups[key].push(d);
+      });
+
+      let mergedGroups = 0, movedLoads = 0, movedEntries = 0, removedDrivers = 0;
+
+      for(const key in groups){
+        const list = groups[key];
+        if(list.length < 2) continue;
+        // keep the oldest record (first created), merge the rest into it
+        list.sort((a,b)=> new Date(a.created_at) - new Date(b.created_at));
+        const keeper = list[0];
+        const extras = list.slice(1);
+        mergedGroups++;
+
+        for(const dup of extras){
+          const {data: movedL, error: mErr} = await sb.from('loads').update({driver_id: keeper.id}).eq('driver_id', dup.id).select();
+          if(!mErr) movedLoads += (movedL || []).length;
+
+          const {data: movedE, error: mErr2} = await sb.from('payroll_entries').update({driver_id: keeper.id}).eq('driver_id', dup.id).select();
+          if(!mErr2) movedEntries += (movedE || []).length;
+
+          const {error: delErr} = await sb.from('drivers').delete().eq('id', dup.id);
+          if(!delErr) removedDrivers++;
+        }
+
+        // keep the most complete unit number if the keeper's was blank
+        if(!keeper.unit_number){
+          const withUnit = extras.find(d => d.unit_number);
+          if(withUnit){
+            await sb.from('drivers').update({unit_number: withUnit.unit_number}).eq('id', keeper.id);
+          }
+        }
+      }
+
+      if(mergedGroups === 0){
+        msgEl.textContent = "Takroriy haydovchi topilmadi \u2014 hammasi allaqachon toza.";
+        msgEl.classList.add('show','ok');
+      } else {
+        msgEl.textContent = `${mergedGroups} ta haydovchi birlashtirildi (${removedDrivers} ta dublikat o'chirildi, ${movedLoads} yuk va ${movedEntries} statement yozuvi ko'chirildi).`;
+        msgEl.classList.add('show','ok');
+        logActivity('drivers_merged', 'driver', `${mergedGroups} guruh birlashtirildi`);
+      }
+
+      await refreshPayroll();
+      refreshLedger();
+      refreshPayrollStatementTable();
+    }catch(err){
+      msgEl.textContent = "Birlashtirishda xatolik: " + (err.message || err);
+      msgEl.classList.add('show','err');
+    }finally{
+      if(btn) btn.disabled = false;
+    }
+  }
+
   function setupImportPicker(){
     const btn = document.getElementById('openImportPickerBtn');
-    if(!btn || btn._wired) return;
-    btn._wired = true;
-    btn.addEventListener('click', ()=>{
-      const wrap = document.getElementById('importPickerWrap');
-      if(wrap.style.display === 'none'){
-        loadImportPicker();
-      } else {
-        wrap.style.display = 'none';
-      }
-    });
+    if(btn && !btn._wired){
+      btn._wired = true;
+      btn.addEventListener('click', ()=>{
+        const wrap = document.getElementById('importPickerWrap');
+        if(wrap.style.display === 'none'){
+          loadImportPicker();
+        } else {
+          wrap.style.display = 'none';
+        }
+      });
+    }
+    const mergeBtn = document.getElementById('mergeDuplicatesBtn');
+    if(mergeBtn && !mergeBtn._wired){
+      mergeBtn._wired = true;
+      mergeBtn.addEventListener('click', mergeDuplicateDrivers);
+    }
   }
 
   function setupPayrollForm(){
