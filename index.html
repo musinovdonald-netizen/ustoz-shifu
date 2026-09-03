@@ -438,6 +438,16 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
   }
   .summary-driver-name{font-weight:600;}
   .summary-earning{font-weight:600; color:var(--route-green);}
+  .balances-cell{font-size:11.5px; line-height:1.6; white-space:nowrap;}
+  .balances-cell .bal-label{color:var(--steel); margin-right:4px;}
+  .balances-cell .bal-pos{color:var(--route-green);}
+  .balances-cell .bal-neg{color:var(--alert);}
+  .stmt-status{
+    display:inline-block; font-size:11px; font-weight:600; padding:3px 9px; border-radius:20px;
+  }
+  .stmt-status.settled{background:rgba(232,162,61,.14); color:#9c6a17;}
+  .stmt-status.unlocked{background:var(--paper); color:var(--steel);}
+  .stmt-status.other{background:rgba(47,104,68,.1); color:var(--route-green);}
   .summary-rate-sub{display:block; font-size:11px; color:var(--steel); font-weight:400;}
   .view-details-link{
     background:none; border:none; cursor:pointer;
@@ -986,6 +996,30 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
         <div id="importResultMsg" class="settings-msg" style="margin:0 18px 14px;"></div>
       </div>
 
+      <div class="card" style="margin-bottom:18px;" id="payrollStatementCard">
+        <div class="card-head">
+          <h2 id="payrollStatementTitle">Payroll Statement</h2>
+        </div>
+        <div class="loads-table-wrap">
+          <table class="loads-table payroll-table">
+            <thead>
+              <tr>
+                <th>Driver</th><th>Truck #</th><th>Balances</th><th>Trips Mileage</th><th>Trip Rate</th>
+                <th>Earning</th><th>Advance</th><th>Fuel</th><th>Toll</th><th>Deductions</th><th>Payout</th><th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="payrollStatementRows"></tbody>
+          </table>
+        </div>
+        <div class="empty" id="payrollStatementEmpty">
+          <div class="empty-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="6" width="18" height="14" rx="2"/><path d="M3 10h18"/></svg>
+          </div>
+          <h3>Hali statement import qilinmagan</h3>
+          <p>Yuqoridagi "Statement tanlash" orqali tayyor payroll hisobotini import qiling.</p>
+        </div>
+      </div>
+
       <div class="card" style="margin-bottom:18px;">
         <div class="card-head">
           <h2>Yangi haydovchi</h2>
@@ -1332,6 +1366,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
       loadSavedInvoices();
       refreshPayroll();
       refreshLedger();
+      refreshPayrollStatementTable();
     });
     refreshActivityLog();
     setupStatementViewer();
@@ -1710,6 +1745,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
         loadSavedInvoices();
         refreshPayroll();
         refreshLedger();
+        refreshPayrollStatementTable();
       });
     }
     if(addBtn && !addBtn._wired){
@@ -1744,6 +1780,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
           loadSavedInvoices();
           refreshPayroll();
           refreshLedger();
+          refreshPayrollStatementTable();
           logActivity('company_add', 'company', name);
         }catch(err){
           alert("Kompaniya qo'shishda xatolik: " + (err.message || err));
@@ -1839,6 +1876,59 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
   }
 
   // detects a "direct" one-row-per-load statement whose columns already match our Payroll fields
+  // detects the driver-level "Payroll Statement" export (First Name, Last Name, Trips Mileage, Trip Rate, Earning...)
+  function tryParsePayrollStatement(columns, rows){
+    const firstIdx = findColIdx(columns, [/^first\s*name$/i]);
+    const lastIdx = findColIdx(columns, [/^last\s*name$/i]);
+    const mileageIdx = findColIdx(columns, [/trips\s*mileage/i]);
+    if(firstIdx === -1 || lastIdx === -1 || mileageIdx === -1) return null;
+
+    const truckIdx = findColIdx(columns, [/^truck\s*#?$/i]);
+    const dedBalIdx = findColIdx(columns, [/deduction\s*balance/i]);
+    const advBalIdx = findColIdx(columns, [/advance\s*balance/i]);
+    const depBalIdx = findColIdx(columns, [/depository\s*fund\s*balance/i]);
+    const tripRateIdx = findColIdx(columns, [/trip\s*rate/i]);
+    const earningIdx = findColIdx(columns, [/^earning$/i]);
+    const advanceIdx = findColIdx(columns, [/^advance$/i]);
+    const fuelIdx = findColIdx(columns, [/fuel\s*amount/i]);
+    const tollIdx = findColIdx(columns, [/toll\s*amount/i]);
+    const deductionsIdx = findColIdx(columns, [/^deductions$/i]);
+    const payoutIdx = findColIdx(columns, [/^payout$/i]);
+    const statusIdx = findColIdx(columns, [/^status$/i]);
+
+    // metadata rows like "Company: X" / "PID: Y" have almost every other cell empty
+    let pidLabel = null;
+    const entries = [];
+    rows.forEach(r=>{
+      const first = r[firstIdx];
+      const pidMatch = first && /^PID:\s*/i.test(String(first));
+      if(pidMatch){ pidLabel = String(first).replace(/^PID:\s*/i,'').trim(); return; }
+      if(!first || /^company:/i.test(String(first))) return;
+      if(!r[lastIdx]) return;
+
+      entries.push({
+        first_name: String(first).trim(),
+        last_name: String(r[lastIdx]).trim(),
+        truck_number: truckIdx!==-1 ? String(r[truckIdx]||'').replace(/\.0$/,'').trim() : '',
+        deduction_balance: dedBalIdx!==-1 ? parseMi(r[dedBalIdx]) : 0,
+        advance_balance: advBalIdx!==-1 ? parseMi(r[advBalIdx]) : 0,
+        depository_fund_balance: depBalIdx!==-1 ? parseMi(r[depBalIdx]) : 0,
+        trips_mileage: parseMi(r[mileageIdx]),
+        trip_rate: tripRateIdx!==-1 ? parseMi(r[tripRateIdx]) : 0,
+        earning: earningIdx!==-1 ? parseMi(r[earningIdx]) : 0,
+        advance: advanceIdx!==-1 ? parseMi(r[advanceIdx]) : 0,
+        fuel_amount: fuelIdx!==-1 ? parseMi(r[fuelIdx]) : 0,
+        toll_amount: tollIdx!==-1 ? parseMi(r[tollIdx]) : 0,
+        deductions: deductionsIdx!==-1 ? parseMi(r[deductionsIdx]) : 0,
+        payout: payoutIdx!==-1 ? parseMi(r[payoutIdx]) : 0,
+        status: statusIdx!==-1 ? String(r[statusIdx]||'') : ''
+      });
+    });
+
+    if(!entries.length) return null;
+    return {pidLabel, entries};
+  }
+
   function tryParseDirectRows(columns, rows){
     const driverIdx = findColIdx(columns, [/driver/i, /haydovchi/i]);
     const unitIdx = findColIdx(columns, [/unit\s*#?$/i, /truck\s*#?$/i]);
@@ -1890,6 +1980,14 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
       const columns = stmt.columns || [];
       const rows = stmt.rows || [];
 
+      // 1) driver-level payroll statement (First Name / Last Name / Earning / Payout...)
+      const payrollStmt = tryParsePayrollStatement(columns, rows);
+      if(payrollStmt){
+        await importPayrollStatementEntries(stmt, payrollStmt, msgEl);
+        return;
+      }
+
+      // 2) raw load lists (trips export, or a direct one-row-per-load format)
       let parsed = tryParseTripsExport(columns, rows);
       if(!parsed) parsed = tryParseDirectRows(columns, rows);
       if(!parsed || !parsed.length){
@@ -1938,6 +2036,51 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     }
   }
 
+  async function importPayrollStatementEntries(stmt, payrollStmt, msgEl){
+    try{
+      const {data: userData} = await sb.auth.getUser();
+      const user = userData && userData.user;
+      if(!user) return;
+
+      const {data: period, error: periodErr} = await sb.from('payroll_periods').insert({
+        user_id: user.id, company_id: selectedCompanyId || null, pid_label: payrollStmt.pidLabel
+      }).select().single();
+      if(periodErr) throw periodErr;
+
+      const {data: existingDrivers} = await sb.from('drivers').select('*');
+      const driverPool = existingDrivers || [];
+
+      let driverCount = 0, entryCount = 0;
+      const seenNames = new Set();
+      for(const e of payrollStmt.entries){
+        const fullName = `${e.first_name} ${e.last_name}`.trim();
+        const driver = await findOrCreateDriverByName(fullName, e.truck_number, driverPool, selectedCompanyId, user.id);
+        if(!seenNames.has(driver.id)){ seenNames.add(driver.id); driverCount++; }
+
+        const {error: insErr} = await sb.from('payroll_entries').insert({
+          user_id: user.id,
+          payroll_period_id: period.id,
+          driver_id: driver.id,
+          first_name: e.first_name, last_name: e.last_name, truck_number: e.truck_number,
+          deduction_balance: e.deduction_balance, advance_balance: e.advance_balance,
+          depository_fund_balance: e.depository_fund_balance, trips_mileage: e.trips_mileage,
+          trip_rate: e.trip_rate, earning: e.earning, advance: e.advance,
+          fuel_amount: e.fuel_amount, toll_amount: e.toll_amount, deductions: e.deductions,
+          payout: e.payout, status: e.status
+        });
+        if(!insErr) entryCount++;
+      }
+
+      msgEl.textContent = `Statement import qilindi: ${driverCount} haydovchi, ${entryCount} yozuv (PID: ${payrollStmt.pidLabel || '\u2014'}).`;
+      msgEl.classList.add('show','ok');
+      logActivity('payroll_statement_import', 'payroll_period', `${stmt.file_name} \u2014 ${entryCount} yozuv`);
+      refreshPayrollStatementTable();
+    }catch(err){
+      msgEl.textContent = "Import qilishda xatolik: " + (err.message || err);
+      msgEl.classList.add('show','err');
+    }
+  }
+
   async function loadImportPicker(){
     const wrap = document.getElementById('importPickerWrap');
     const rowsEl = document.getElementById('importPickerRows');
@@ -1960,6 +2103,62 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
       wrap.style.display = 'block';
     }catch(err){
       console.error('Statement ro\u2019yxatini yuklashda xatolik:', err);
+    }
+  }
+
+  async function refreshPayrollStatementTable(){
+    const rowsEl = document.getElementById('payrollStatementRows');
+    const emptyEl = document.getElementById('payrollStatementEmpty');
+    const titleEl = document.getElementById('payrollStatementTitle');
+    if(!rowsEl) return;
+    try{
+      let periodQuery = sb.from('payroll_periods').select('*').order('created_at', {ascending:false}).limit(1);
+      if(selectedCompanyId) periodQuery = periodQuery.eq('company_id', selectedCompanyId);
+      const {data: periods, error: pErr} = await periodQuery;
+      if(pErr) throw pErr;
+
+      if(!periods || !periods.length){
+        rowsEl.innerHTML = '';
+        emptyEl.style.display = 'flex';
+        titleEl.textContent = 'Payroll Statement';
+        return;
+      }
+      const period = periods[0];
+      titleEl.textContent = period.pid_label ? `Payroll Statement \u2014 PID ${period.pid_label}` : 'Payroll Statement';
+
+      const {data: entries, error: eErr} = await sb.from('payroll_entries').select('*').eq('payroll_period_id', period.id).order('earning', {ascending:false});
+      if(eErr) throw eErr;
+      if(!entries || !entries.length){
+        rowsEl.innerHTML = '';
+        emptyEl.style.display = 'flex';
+        return;
+      }
+      emptyEl.style.display = 'none';
+
+      rowsEl.innerHTML = entries.map(e=>{
+        const statusClass = /settled/i.test(e.status||'') ? 'settled' : (/unlock/i.test(e.status||'') ? 'unlocked' : 'other');
+        return `
+          <tr>
+            <td class="summary-driver-name">${e.first_name} ${e.last_name}</td>
+            <td>${e.truck_number ? `<span class="truck-badge">${e.truck_number}</span>` : '—'}</td>
+            <td class="balances-cell mono">
+              <div><span class="bal-label">Dep:</span>${fmtMoney(e.depository_fund_balance)}</div>
+              <div><span class="bal-label">Adv:</span>${fmtMoney(e.advance_balance)}</div>
+              <div><span class="bal-label">Ded:</span>${fmtMoney(e.deduction_balance)}</div>
+            </td>
+            <td class="mono">${fmtNum(e.trips_mileage)} mi</td>
+            <td class="mono">${fmtMoney(e.trip_rate)}</td>
+            <td class="mono summary-earning">${fmtMoney(e.earning)}</td>
+            <td class="mono">${fmtMoney(e.advance)}</td>
+            <td class="mono">${fmtMoney(e.fuel_amount)}</td>
+            <td class="mono">${fmtMoney(e.toll_amount)}</td>
+            <td class="mono">${fmtMoney(e.deductions)}</td>
+            <td class="mono summary-earning">${fmtMoney(e.payout)}</td>
+            <td><span class="stmt-status ${statusClass}">${e.status || '—'}</span></td>
+          </tr>`;
+      }).join('');
+    }catch(err){
+      console.error('Payroll statement yuklashda xatolik:', err);
     }
   }
 
