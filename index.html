@@ -1279,11 +1279,11 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     const nextBtn = document.getElementById('weekNextBtn');
     if(prevBtn && !prevBtn._wired){
       prevBtn._wired = true;
-      prevBtn.addEventListener('click', ()=>{ weekOffset--; renderWeekBanner(); });
+      prevBtn.addEventListener('click', ()=>{ weekOffset--; renderWeekBanner(); refreshPayrollStatementTable(); });
     }
     if(nextBtn && !nextBtn._wired){
       nextBtn._wired = true;
-      nextBtn.addEventListener('click', ()=>{ weekOffset++; renderWeekBanner(); });
+      nextBtn.addEventListener('click', ()=>{ weekOffset++; renderWeekBanner(); refreshPayrollStatementTable(); });
     }
   }
 
@@ -2161,14 +2161,48 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     }
   }
 
+  function isoWeekToMonday(year, week){
+    const jan4 = new Date(Date.UTC(year,0,4));
+    const jan4Day = (jan4.getUTCDay()+6)%7; // Mon=0..Sun=6
+    const week1Monday = new Date(jan4);
+    week1Monday.setUTCDate(jan4.getUTCDate()-jan4Day);
+    const target = new Date(week1Monday);
+    target.setUTCDate(week1Monday.getUTCDate() + (week-1)*7);
+    return target;
+  }
+
+  function toISODateString(d){
+    return d.toISOString().slice(0,10);
+  }
+
   async function importPayrollStatementEntries(stmt, payrollStmt, msgEl){
     try{
       const {data: userData} = await sb.auth.getUser();
       const user = userData && userData.user;
       if(!user) return;
 
+      // derive the calendar week (Mon-Sun) from a "YYYY-WW" PID label when possible,
+      // so navigating the week banner can find the right statement automatically
+      let periodStart = null, periodEnd = null;
+      const pidMatch = payrollStmt.pidLabel && payrollStmt.pidLabel.match(/^(\d{4})-(\d{1,2})$/);
+      if(pidMatch){
+        const monday = isoWeekToMonday(parseInt(pidMatch[1],10), parseInt(pidMatch[2],10));
+        const sunday = new Date(monday);
+        sunday.setUTCDate(sunday.getUTCDate()+6);
+        periodStart = toISODateString(monday);
+        periodEnd = toISODateString(sunday);
+      } else {
+        // fall back to whichever week is currently shown in the banner
+        const monday = getMondayOfWeek(new Date(), weekOffset);
+        const sunday = new Date(monday);
+        sunday.setDate(sunday.getDate()+6);
+        periodStart = toISODateString(monday);
+        periodEnd = toISODateString(sunday);
+      }
+
       const {data: period, error: periodErr} = await sb.from('payroll_periods').insert({
-        user_id: user.id, company_id: selectedCompanyId || null, pid_label: payrollStmt.pidLabel
+        user_id: user.id, company_id: selectedCompanyId || null, pid_label: payrollStmt.pidLabel,
+        period_start: periodStart, period_end: periodEnd
       }).select().single();
       if(periodErr) throw periodErr;
 
@@ -2196,7 +2230,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
         if(!insErr) entryCount++;
       }
 
-      msgEl.textContent = `Statement import qilindi: ${driverCount} haydovchi, ${entryCount} yozuv (PID: ${payrollStmt.pidLabel || '\u2014'}).`;
+      msgEl.textContent = `Statement import qilindi: ${driverCount} haydovchi, ${entryCount} yozuv (PID: ${payrollStmt.pidLabel || '\u2014'}, hafta: ${periodStart} \u2014 ${periodEnd}).`;
       msgEl.classList.add('show','ok');
       logActivity('payroll_statement_import', 'payroll_period', `${stmt.file_name} \u2014 ${entryCount} yozuv`);
       refreshPayrollStatementTable();
@@ -2248,7 +2282,10 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     const titleEl = document.getElementById('payrollStatementTitle');
     if(!rowsEl) return;
     try{
-      let periodQuery = sb.from('payroll_periods').select('*').order('created_at', {ascending:false}).limit(1);
+      const monday = getMondayOfWeek(new Date(), weekOffset);
+      const mondayStr = toISODateString(monday);
+
+      let periodQuery = sb.from('payroll_periods').select('*').eq('period_start', mondayStr).order('created_at', {ascending:false}).limit(1);
       if(selectedCompanyId) periodQuery = periodQuery.eq('company_id', selectedCompanyId);
       const {data: periods, error: pErr} = await periodQuery;
       if(pErr) throw pErr;
@@ -2256,6 +2293,8 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
       if(!periods || !periods.length){
         rowsEl.innerHTML = '';
         emptyEl.style.display = 'flex';
+        emptyEl.querySelector('h3').textContent = "Bu hafta uchun statement yo'q";
+        emptyEl.querySelector('p').textContent = "Tanlangan hafta uchun hali statement import qilinmagan. Boshqa haftani tanlang yoki yangi statement import qiling.";
         titleEl.textContent = 'Payroll Statement';
         return;
       }
