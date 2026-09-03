@@ -60,6 +60,10 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     display:grid;
     grid-template-columns:230px 1fr;
     min-height:100vh;
+    transition:grid-template-columns .2s ease;
+  }
+  .app.sidebar-collapsed{
+    grid-template-columns:68px 1fr;
   }
 
   /* ---------- SIDEBAR ---------- */
@@ -70,12 +74,14 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     display:flex;
     flex-direction:column;
     gap:28px;
+    overflow:hidden;
   }
   .brand{
     display:flex;
     align-items:center;
     gap:10px;
     padding:0 6px;
+    position:relative;
   }
   .brand-mark{
     width:30px;height:30px;
@@ -88,12 +94,37 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     color:var(--ink);
     flex-shrink:0;
   }
+  .brand-text-wrap{overflow:hidden; white-space:nowrap; flex:1;}
   .brand-name{
     font-family:'Space Grotesk',sans-serif;
     font-weight:600;
     font-size:16.5px;
     letter-spacing:-0.01em;
   }
+  .sidebar-collapse-btn{
+    width:24px; height:24px; flex-shrink:0;
+    display:flex; align-items:center; justify-content:center;
+    background:rgba(255,255,255,.06);
+    border:none; border-radius:6px;
+    color:#C7CDD6; cursor:pointer;
+    transition:transform .2s ease;
+  }
+  .sidebar-collapse-btn:hover{background:rgba(255,255,255,.12); color:#fff;}
+  .app.sidebar-collapsed .sidebar-collapse-btn{transform:rotate(180deg);}
+  .app.sidebar-collapsed .brand-text-wrap,
+  .app.sidebar-collapsed .nav-label,
+  .app.sidebar-collapsed .nav-item span,
+  .app.sidebar-collapsed .nav-item-label,
+  .app.sidebar-collapsed .sidebar-foot-text,
+  .app.sidebar-collapsed .company-select-full-label{
+    display:none;
+  }
+  .app.sidebar-collapsed .brand{justify-content:center;}
+  .app.sidebar-collapsed .brand-mark{margin:0 auto;}
+  .app.sidebar-collapsed .sidebar-collapse-btn{position:absolute; right:-30px; top:0; background:var(--ink); border:1px solid rgba(255,255,255,.15);}
+  .app.sidebar-collapsed .nav-item{justify-content:center; padding:9px;}
+  .app.sidebar-collapsed .sidebar-foot{align-items:center; text-align:center;}
+  .app.sidebar-collapsed .logout-btn span{display:none;}
   .brand-sub{
     font-size:10.5px;
     color:#8B96A3;
@@ -711,6 +742,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     }
     nav.navlist{flex-direction:row;}
     .nav-label,.sidebar-foot{display:none;}
+    .sidebar-collapse-btn{display:none;}
     main{padding:20px;}
     .cluster{grid-template-columns:1fr; gap:18px;}
     .gauge:not(:last-child)::after{display:none;}
@@ -752,7 +784,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
 
 <div class="app" id="appRoot" style="display:none;">
 
-  <aside class="sidebar">
+  <aside class="sidebar" id="sidebar">
     <div class="brand">
       <div class="brand-mark">
         <svg width="20" height="20" viewBox="0 0 40 40" fill="none">
@@ -761,51 +793,53 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
           <circle cx="29" cy="26" r="7.2" stroke="#14213D" stroke-width="2.6"/>
         </svg>
       </div>
-      <div>
+      <div class="brand-text-wrap">
         <div class="brand-name">Ustoz Shifu</div>
       </div>
+      <button class="sidebar-collapse-btn" id="sidebarCollapseBtn" type="button" title="Panelni yig'ish/yoyish">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+      </button>
     </div>
 
     <nav class="navlist" id="navlist">
       <div class="nav-label">Umumiy</div>
       <a class="nav-item active" data-panel="dashboard">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
-        Bosh sahifa
+        <span class="nav-item-label">Bosh sahifa</span>
       </a>
       <a class="nav-item" data-panel="invoices">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M7 3h10l3 3v15H4V6z"/><path d="M8 10h8M8 14h8M8 18h5"/></svg>
-        Hisob-fakturalar
+        <span class="nav-item-label">Hisob-fakturalar</span>
       </a>
       <a class="nav-item" data-panel="ledger">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 4h16v16H4z"/><path d="M4 10h16M10 10v10"/></svg>
-        Kirim-chiqim
+        <span class="nav-item-label">Kirim-chiqim</span>
       </a>
       <a class="nav-item" data-panel="reports">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20V10M11 20V4M18 20v-7"/></svg>
-        Hisobotlar
+        <span class="nav-item-label">Hisobotlar</span>
       </a>
       <a class="nav-item" data-panel="payroll">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="6" width="18" height="14" rx="2"/><path d="M3 10h18"/><circle cx="8" cy="15" r="1.2"/></svg>
-        Payroll
+        <span class="nav-item-label">Payroll</span>
       </a>
       <a class="nav-item" data-panel="documents">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 3h9l5 5v13H6z"/><path d="M14 3v5h5"/></svg>
-        Hujjatlar
+        <span class="nav-item-label">Hujjatlar</span>
       </a>
 
       <div class="nav-label">Sozlamalar</div>
       <a class="nav-item" data-panel="settings">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9c.2.6.7 1 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
-        Sozlamalar
+        <span class="nav-item-label">Sozlamalar</span>
       </a>
     </nav>
 
     <div class="sidebar-foot">
-      Ishlatuvchi: <b>Donald</b><br>
-      Rol: Buxgalter
-      <button class="logout-btn" type="button" id="logoutBtn">
+      <span class="sidebar-foot-text">Ishlatuvchi: <b>Donald</b><br>Rol: Buxgalter</span>
+      <button class="logout-btn" type="button" id="logoutBtn" title="Chiqish">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>
-        Chiqish
+        <span>Chiqish</span>
       </button>
     </div>
   </aside>
@@ -1182,6 +1216,24 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     }
   }
 
+  function setupSidebarCollapse(){
+    const btn = document.getElementById('sidebarCollapseBtn');
+    const appRoot = document.getElementById('appRoot');
+    if(!btn || !appRoot || btn._wired) return;
+    btn._wired = true;
+
+    try{
+      if(localStorage.getItem('ustoz_sidebar_collapsed') === '1'){
+        appRoot.classList.add('sidebar-collapsed');
+      }
+    }catch(e){}
+
+    btn.addEventListener('click', ()=>{
+      const collapsed = appRoot.classList.toggle('sidebar-collapsed');
+      try{ localStorage.setItem('ustoz_sidebar_collapsed', collapsed ? '1' : '0'); }catch(e){}
+    });
+  }
+
   function setupThemeToggle(){
     applyThemeIcons();
     const btn = document.getElementById('themeToggleBtn');
@@ -1361,6 +1413,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     setupImportPicker();
     setupCompanySelector();
     setupThemeToggle();
+    setupSidebarCollapse();
     setupReportsExport();
     loadCompanies().then(()=>{
       loadSavedInvoices();
