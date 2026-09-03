@@ -381,7 +381,9 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     padding:14px 20px;
     margin-bottom:18px;
     display:flex;
+    align-items:center;
     justify-content:center;
+    gap:14px;
   }
   #weekBannerInput{
     background:transparent;
@@ -392,10 +394,21 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     font-size:16px;
     text-align:center;
     width:100%;
-    max-width:420px;
+    max-width:340px;
+    cursor:default;
   }
   #weekBannerInput::placeholder{color:rgba(255,255,255,.75);}
   #weekBannerInput:focus-visible{outline:2px solid #fff; outline-offset:3px; border-radius:6px;}
+  .week-nav-btn{
+    width:28px; height:28px; flex-shrink:0;
+    display:flex; align-items:center; justify-content:center;
+    background:rgba(255,255,255,.15);
+    border:none; border-radius:50%;
+    color:#fff; cursor:pointer;
+    transition:background .15s ease;
+  }
+  .week-nav-btn:hover{background:rgba(255,255,255,.3);}
+  .week-nav-btn:focus-visible{outline:2px solid #fff; outline-offset:2px;}
 
   .driver-card{
     background:var(--panel);
@@ -1003,7 +1016,13 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     <!-- PAYROLL PANEL -->
     <section class="panel" id="panel-payroll">
       <div class="week-banner" id="weekBanner">
-        <input type="text" id="weekBannerInput" placeholder="Week #34  period 08/17/26 - 08/23/26" value="">
+        <button class="week-nav-btn" id="weekPrevBtn" type="button" title="Oldingi hafta">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M15 18l-6-6 6-6"/></svg>
+        </button>
+        <input type="text" id="weekBannerInput" placeholder="Week #34  period 08/17/26 - 08/23/26" value="" readonly>
+        <button class="week-nav-btn" id="weekNextBtn" type="button" title="Keyingi hafta">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M9 18l6-6-6-6"/></svg>
+        </button>
       </div>
 
       <div class="card" style="margin-bottom:18px;">
@@ -1213,6 +1232,61 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     }
   }
 
+  // ---------- Automatic week banner (Mon-Sun, ISO week number) ----------
+  let weekOffset = 0; // 0 = current week, -1 = previous, +1 = next
+
+  function getMondayOfWeek(date, offsetWeeks){
+    const d = new Date(date);
+    d.setHours(0,0,0,0);
+    const day = d.getDay(); // 0=Sun..6=Sat
+    const diffToMonday = (day === 0 ? -6 : 1 - day);
+    d.setDate(d.getDate() + diffToMonday + offsetWeeks*7);
+    return d;
+  }
+
+  function isoWeekNumber(date){
+    const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+    const dayNum = (d.getUTCDay() + 6) % 7; // Mon=0..Sun=6
+    d.setUTCDate(d.getUTCDate() - dayNum + 3);
+    const firstThursday = new Date(Date.UTC(d.getUTCFullYear(),0,4));
+    const weekNum = 1 + Math.round(((d - firstThursday) / 86400000 - 3 + ((firstThursday.getUTCDay()+6)%7)) / 7);
+    return weekNum;
+  }
+
+  function fmtWeekDate(d){
+    const mm = String(d.getMonth()+1).padStart(2,'0');
+    const dd = String(d.getDate()).padStart(2,'0');
+    const yy = String(d.getFullYear()).slice(-2);
+    return `${mm}/${dd}/${yy}`;
+  }
+
+  function computeWeekLabel(offset){
+    const monday = getMondayOfWeek(new Date(), offset);
+    const sunday = new Date(monday);
+    sunday.setDate(sunday.getDate()+6);
+    const weekNum = isoWeekNumber(monday);
+    return `Week #${weekNum}  period ${fmtWeekDate(monday)} - ${fmtWeekDate(sunday)}`;
+  }
+
+  function renderWeekBanner(){
+    const input = document.getElementById('weekBannerInput');
+    if(input) input.value = computeWeekLabel(weekOffset);
+  }
+
+  function setupWeekBanner(){
+    renderWeekBanner();
+    const prevBtn = document.getElementById('weekPrevBtn');
+    const nextBtn = document.getElementById('weekNextBtn');
+    if(prevBtn && !prevBtn._wired){
+      prevBtn._wired = true;
+      prevBtn.addEventListener('click', ()=>{ weekOffset--; renderWeekBanner(); });
+    }
+    if(nextBtn && !nextBtn._wired){
+      nextBtn._wired = true;
+      nextBtn.addEventListener('click', ()=>{ weekOffset++; renderWeekBanner(); });
+    }
+  }
+
   function setupSidebarCollapse(){
     const btn = document.getElementById('sidebarCollapseBtn');
     const appRoot = document.getElementById('appRoot');
@@ -1411,6 +1485,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     setupCompanySelector();
     setupThemeToggle();
     setupSidebarCollapse();
+    setupWeekBanner();
     setupReportsExport();
     loadCompanies().then(()=>{
       loadSavedInvoices();
