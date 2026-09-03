@@ -492,6 +492,21 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
   .stmt-status.settled{background:rgba(232,162,61,.14); color:#9c6a17;}
   .stmt-status.unlocked{background:var(--paper); color:var(--steel);}
   .stmt-status.other{background:rgba(47,104,68,.1); color:var(--route-green);}
+
+  .stmt-stats-bar{
+    display:flex;
+    align-items:center;
+    padding:14px 18px;
+    border-bottom:1px solid var(--line);
+    background:var(--paper);
+    flex-wrap:wrap;
+    gap:0;
+  }
+  .stmt-stat{display:flex; flex-direction:column; padding:0 18px;}
+  .stmt-stat-value{font-family:'IBM Plex Mono',monospace; font-weight:700; font-size:15px; color:var(--text);}
+  .stmt-stat-label{font-size:10.5px; color:var(--steel); text-transform:uppercase; letter-spacing:.03em; margin-top:2px;}
+  .stmt-stat-divider{width:1px; height:28px; background:var(--line);}
+  .stmt-stat:first-child{padding-left:0;}
   .summary-rate-sub{display:block; font-size:11px; color:var(--steel); font-weight:400;}
   .view-details-link{
     background:none; border:none; cursor:pointer;
@@ -1046,6 +1061,18 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
       <div class="card" style="margin-bottom:18px;" id="payrollStatementCard">
         <div class="card-head">
           <h2 id="payrollStatementTitle">Payroll Statement</h2>
+          <button class="icon-btn" id="refreshStatementBtn" title="Yangilash" type="button">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+          </button>
+        </div>
+        <div class="stmt-stats-bar" id="stmtStatsBar">
+          <div class="stmt-stat"><span class="stmt-stat-value" id="statTotalDrivers">0</span><span class="stmt-stat-label">Total Drivers</span></div>
+          <div class="stmt-stat-divider"></div>
+          <div class="stmt-stat"><span class="stmt-stat-value" id="statSettled">0 / 0</span><span class="stmt-stat-label">Settled / Non-Settled</span></div>
+          <div class="stmt-stat-divider"></div>
+          <div class="stmt-stat"><span class="stmt-stat-value" id="statTripsRate">$0.00</span><span class="stmt-stat-label">Trips Rate</span></div>
+          <div class="stmt-stat-divider"></div>
+          <div class="stmt-stat"><span class="stmt-stat-value" id="statTotalPayout">$0.00</span><span class="stmt-stat-label">Total Payout</span></div>
         </div>
         <div class="loads-table-wrap">
           <table class="loads-table payroll-table">
@@ -2276,6 +2303,24 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     }
   }
 
+  function updateStmtStatsBar(entries){
+    const totalDriversEl = document.getElementById('statTotalDrivers');
+    const settledEl = document.getElementById('statSettled');
+    const tripsRateEl = document.getElementById('statTripsRate');
+    const payoutEl = document.getElementById('statTotalPayout');
+    if(!totalDriversEl) return;
+
+    const settledCount = entries.filter(e => /settled/i.test(e.status||'')).length;
+    const nonSettledCount = entries.length - settledCount;
+    const totalTripsRate = entries.reduce((s,e)=>s+Number(e.trip_rate||0),0);
+    const totalPayout = entries.reduce((s,e)=>s+Number(e.payout||0),0);
+
+    totalDriversEl.textContent = entries.length;
+    settledEl.textContent = `${settledCount} / ${nonSettledCount}`;
+    tripsRateEl.textContent = fmtMoney(totalTripsRate);
+    payoutEl.textContent = fmtMoney(totalPayout);
+  }
+
   async function refreshPayrollStatementTable(){
     const rowsEl = document.getElementById('payrollStatementRows');
     const emptyEl = document.getElementById('payrollStatementEmpty');
@@ -2296,6 +2341,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
         emptyEl.querySelector('h3').textContent = "Bu hafta uchun statement yo'q";
         emptyEl.querySelector('p').textContent = "Tanlangan hafta uchun hali statement import qilinmagan. Boshqa haftani tanlang yoki yangi statement import qiling.";
         titleEl.textContent = 'Payroll Statement';
+        updateStmtStatsBar([]);
         return;
       }
       const period = periods[0];
@@ -2306,9 +2352,11 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
       if(!entries || !entries.length){
         rowsEl.innerHTML = '';
         emptyEl.style.display = 'flex';
+        updateStmtStatsBar([]);
         return;
       }
       emptyEl.style.display = 'none';
+      updateStmtStatsBar(entries);
 
       rowsEl.innerHTML = entries.map(e=>{
         const statusClass = /settled/i.test(e.status||'') ? 'settled' : (/unlock/i.test(e.status||'') ? 'unlocked' : 'other');
@@ -2424,6 +2472,11 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     if(mergeBtn && !mergeBtn._wired){
       mergeBtn._wired = true;
       mergeBtn.addEventListener('click', mergeDuplicateDrivers);
+    }
+    const refreshBtn = document.getElementById('refreshStatementBtn');
+    if(refreshBtn && !refreshBtn._wired){
+      refreshBtn._wired = true;
+      refreshBtn.addEventListener('click', refreshPayrollStatementTable);
     }
   }
 
