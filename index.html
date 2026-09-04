@@ -1800,9 +1800,10 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
       if(dErr) throw dErr;
       if(lErr) throw lErr;
 
-      const drivers = selectedCompanyId
+      const drivers = (selectedCompanyId
         ? (allDrivers || []).filter(d => d.company_id === selectedCompanyId)
-        : (allDrivers || []);
+        : (allDrivers || [])
+      ).filter(d => (d.worker_type || 'driver') === 'driver');
 
       const summaryRows = document.getElementById('payrollSummaryRows');
       const summaryCard = document.getElementById('payrollSummaryCard');
