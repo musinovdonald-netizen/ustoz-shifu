@@ -902,34 +902,6 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
       <button class="btn" type="button" id="cancelAddCompanyBtn">Bekor qilish</button>
     </form>
 
-    <!-- Signature gauge cluster -->
-    <div class="cluster">
-      <div class="gauge">
-        <svg width="120" height="70" viewBox="0 0 120 70">
-          <path d="M10 65 A50 50 0 0 1 110 65" fill="none" stroke="rgba(255,255,255,.12)" stroke-width="8" stroke-linecap="round"/>
-          <path d="M10 65 A50 50 0 0 1 110 65" fill="none" stroke="var(--amber)" stroke-width="8" stroke-linecap="round" stroke-dasharray="157" stroke-dashoffset="157"/>
-        </svg>
-        <div class="gauge-value">0<sup>ta</sup></div>
-        <div class="gauge-label">Ochiq hisob-fakturalar</div>
-      </div>
-      <div class="gauge">
-        <svg width="120" height="70" viewBox="0 0 120 70">
-          <path d="M10 65 A50 50 0 0 1 110 65" fill="none" stroke="rgba(255,255,255,.12)" stroke-width="8" stroke-linecap="round"/>
-          <path d="M10 65 A50 50 0 0 1 110 65" fill="none" stroke="var(--route-green)" stroke-width="8" stroke-linecap="round" stroke-dasharray="157" stroke-dashoffset="157"/>
-        </svg>
-        <div class="gauge-value">$0</div>
-        <div class="gauge-label">Bu oy tushgan to'lov</div>
-      </div>
-      <div class="gauge">
-        <svg width="120" height="70" viewBox="0 0 120 70">
-          <path d="M10 65 A50 50 0 0 1 110 65" fill="none" stroke="rgba(255,255,255,.12)" stroke-width="8" stroke-linecap="round"/>
-          <path d="M10 65 A50 50 0 0 1 110 65" fill="none" stroke="var(--alert)" stroke-width="8" stroke-linecap="round" stroke-dasharray="157" stroke-dashoffset="157"/>
-        </svg>
-        <div class="gauge-value">$0</div>
-        <div class="gauge-label">Muddati o'tgan</div>
-      </div>
-    </div>
-
     <!-- DASHBOARD PANEL -->
     <section class="panel active" id="panel-dashboard">
       <div class="card">
@@ -1501,11 +1473,8 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
   const d = new Date();
   document.getElementById('dateChip').textContent = d.toLocaleDateString('uz-UZ', {day:'2-digit', month:'long', year:'numeric'});
 
-  // gauge needle animation (draws in on load) — only once per page load
+  // one-time setup on first unlock
   if(!initApp._ran){
-    document.querySelectorAll('.gauge path[stroke-dasharray]').forEach((p,i)=>{
-      setTimeout(()=>{ p.style.transition='stroke-dashoffset .9s cubic-bezier(.4,0,.2,1)'; p.style.strokeDashoffset = 157*0.94; }, 150+i*120);
-    });
     setupSettingsForms();
     setupPayrollForm();
     setupImportPicker();
