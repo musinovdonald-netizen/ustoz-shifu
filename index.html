@@ -2125,6 +2125,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
       const driverPool = existingDrivers || [];
 
       let driverCount = 0, loadCount = 0;
+      let lastError = null;
       const seenNames = new Set();
       for(const item of parsed){
         if(!item.driverName) continue;
@@ -2143,11 +2144,21 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
           dhd: item.dhd || 0,
           mileage: item.mileage || 0
         });
-        if(!insErr) loadCount++;
+        if(!insErr){
+          loadCount++;
+        } else {
+          lastError = insErr;
+          console.error('Yukni saqlashda xatolik:', insErr, item);
+        }
       }
 
-      msgEl.textContent = `Import tugadi: ${driverCount} haydovchi, ${loadCount} yuk qo'shildi.`;
-      msgEl.classList.add('show','ok');
+      if(loadCount > 0){
+        msgEl.textContent = `Import tugadi: ${driverCount} haydovchi, ${loadCount} yuk qo'shildi.`;
+        msgEl.classList.add('show','ok');
+      } else {
+        msgEl.textContent = `Haydovchilar topildi (${driverCount}), lekin yuklar saqlanmadi. Xatolik: ${lastError ? (lastError.message || JSON.stringify(lastError)) : 'nomalum'}`;
+        msgEl.classList.add('show','err');
+      }
       logActivity('statement_import', 'statement', `${stmt.file_name} \u2014 ${loadCount} yuk`);
       await refreshPayroll();
       refreshLedger();
