@@ -410,6 +410,24 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
   .week-nav-btn:hover{background:rgba(255,255,255,.3);}
   .week-nav-btn:focus-visible{outline:2px solid #fff; outline-offset:2px;}
 
+  .payroll-type-tabs{
+    display:flex;
+    gap:4px;
+    margin-bottom:14px;
+    border-bottom:1px solid var(--line);
+  }
+  .payroll-tab{
+    background:none; border:none; cursor:pointer;
+    font-family:'Space Grotesk',sans-serif;
+    font-size:13.5px; font-weight:600;
+    color:var(--steel);
+    padding:10px 4px;
+    margin-right:20px;
+    border-bottom:2px solid transparent;
+  }
+  .payroll-tab:hover{color:var(--text);}
+  .payroll-tab.active{color:var(--text); border-bottom-color:var(--amber);}
+
   .driver-card{
     background:var(--panel);
     border:1px solid var(--line);
@@ -1002,6 +1020,11 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
 
     <!-- PAYROLL PANEL -->
     <section class="panel" id="panel-payroll">
+      <div class="payroll-type-tabs">
+        <button class="payroll-tab active" id="tabDriversPayroll" type="button" data-type="driver">Drivers' Payroll</button>
+        <button class="payroll-tab" id="tabContractorsPayroll" type="button" data-type="contractor">Contractors' Payroll</button>
+      </div>
+
       <div class="week-banner" id="weekBanner">
         <button class="week-nav-btn" id="weekPrevBtn" type="button" title="Oldingi hafta">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M15 18l-6-6 6-6"/></svg>
@@ -1081,6 +1104,13 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
           <label style="min-width:130px;">
             <span>Unit №</span>
             <input type="text" id="driverUnit" placeholder="0007">
+          </label>
+          <label style="min-width:150px;">
+            <span>Turi</span>
+            <select id="driverWorkerType" style="font-family:'IBM Plex Sans',sans-serif; font-size:14px; padding:9px 12px; border-radius:8px; border:1px solid var(--line); background:var(--paper); color:var(--text);">
+              <option value="driver">Driver</option>
+              <option value="contractor">Contractor</option>
+            </select>
           </label>
           <button class="btn btn-primary" type="submit" style="align-self:flex-start;">+ Qo'shish</button>
         </form>
@@ -1482,6 +1512,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     setupThemeToggle();
     setupSidebarCollapse();
     setupWeekBanner();
+    setupPayrollTypeTabs();
     setupReportsExport();
     loadCompanies().then(()=>{
       loadSavedInvoices();
@@ -2301,6 +2332,8 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     payoutEl.textContent = fmtMoney(totalPayout);
   }
 
+  let payrollActiveType = 'driver';
+
   async function refreshPayrollStatementTable(){
     const rowsEl = document.getElementById('payrollStatementRows');
     const emptyEl = document.getElementById('payrollStatementEmpty');
@@ -2327,11 +2360,24 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
       const period = periods[0];
       titleEl.textContent = period.pid_label ? `Payroll Statement \u2014 PID ${period.pid_label}` : 'Payroll Statement';
 
-      const {data: entries, error: eErr} = await sb.from('payroll_entries').select('*').eq('payroll_period_id', period.id).order('earning', {ascending:false});
+      const {data: allEntries, error: eErr} = await sb.from('payroll_entries').select('*').eq('payroll_period_id', period.id).order('earning', {ascending:false});
       if(eErr) throw eErr;
+
+      // filter to the active tab (Drivers / Contractors) using each entry's linked driver's worker_type
+      let entries = allEntries || [];
+      if(entries.length){
+        const driverIds = [...new Set(entries.map(e=>e.driver_id).filter(Boolean))];
+        const {data: relatedDrivers} = await sb.from('drivers').select('id,worker_type').in('id', driverIds);
+        const typeById = {};
+        (relatedDrivers||[]).forEach(d=> typeById[d.id] = d.worker_type || 'driver');
+        entries = entries.filter(e => (typeById[e.driver_id] || 'driver') === payrollActiveType);
+      }
+
       if(!entries || !entries.length){
         rowsEl.innerHTML = '';
         emptyEl.style.display = 'flex';
+        emptyEl.querySelector('h3').textContent = payrollActiveType === 'contractor' ? "Bu hafta uchun contractor statement yo'q" : "Bu hafta uchun statement yo'q";
+        emptyEl.querySelector('p').textContent = "Tanlangan hafta uchun hali statement import qilinmagan. Boshqa haftani tanlang yoki yangi statement import qiling.";
         updateStmtStatsBar([]);
         return;
       }
@@ -2363,6 +2409,25 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     }catch(err){
       console.error('Payroll statement yuklashda xatolik:', err);
     }
+  }
+
+  function setupPayrollTypeTabs(){
+    const driverTab = document.getElementById('tabDriversPayroll');
+    const contractorTab = document.getElementById('tabContractorsPayroll');
+    if(!driverTab || driverTab._wired) return;
+    driverTab._wired = true;
+    driverTab.addEventListener('click', ()=>{
+      payrollActiveType = 'driver';
+      driverTab.classList.add('active');
+      contractorTab.classList.remove('active');
+      refreshPayrollStatementTable();
+    });
+    contractorTab.addEventListener('click', ()=>{
+      payrollActiveType = 'contractor';
+      contractorTab.classList.add('active');
+      driverTab.classList.remove('active');
+      refreshPayrollStatementTable();
+    });
   }
 
   async function mergeDuplicateDrivers(){
@@ -2465,6 +2530,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
       e.preventDefault();
       const name = document.getElementById('driverName').value.trim();
       const unit = document.getElementById('driverUnit').value.trim();
+      const workerType = document.getElementById('driverWorkerType').value || 'driver';
       if(!name) return;
       if(!selectedCompanyId){
         alert("Avval kompaniya tanlang yoki yangi kompaniya qo'shing.");
@@ -2475,13 +2541,13 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
         const user = userData && userData.user;
         if(!user) return;
         const {error} = await sb.from('drivers').insert({
-          user_id: user.id, name, unit_number: unit || null, company_id: selectedCompanyId
+          user_id: user.id, name, unit_number: unit || null, company_id: selectedCompanyId, worker_type: workerType
         });
         if(error) throw error;
         addDriverForm.reset();
         await refreshPayroll();
         refreshLedger();
-        logActivity('driver_add', 'driver', `${name}${unit ? ' (Unit#'+unit+')' : ''}`);
+        logActivity('driver_add', 'driver', `${name}${unit ? ' (Unit#'+unit+')' : ''} [${workerType}]`);
       }catch(err){
         alert("Haydovchi qo'shishda xatolik: " + (err.message || err));
       }
