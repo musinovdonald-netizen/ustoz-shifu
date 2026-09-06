@@ -1263,6 +1263,10 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
 
   // ---------- Automatic week banner (Mon-Sun, ISO week number) ----------
   let weekOffset = 0; // 0 = current week, -1 = previous, +1 = next
+  try{
+    const savedOffset = localStorage.getItem('ustoz_week_offset');
+    if(savedOffset !== null) weekOffset = parseInt(savedOffset, 10) || 0;
+  }catch(e){}
 
   function getMondayOfWeek(date, offsetWeeks){
     const d = new Date(date);
@@ -1308,11 +1312,11 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     const nextBtn = document.getElementById('weekNextBtn');
     if(prevBtn && !prevBtn._wired){
       prevBtn._wired = true;
-      prevBtn.addEventListener('click', ()=>{ weekOffset--; renderWeekBanner(); refreshPayrollStatementTable(); });
+      prevBtn.addEventListener('click', ()=>{ weekOffset--; try{ localStorage.setItem('ustoz_week_offset', weekOffset); }catch(e){} renderWeekBanner(); refreshPayrollStatementTable(); });
     }
     if(nextBtn && !nextBtn._wired){
       nextBtn._wired = true;
-      nextBtn.addEventListener('click', ()=>{ weekOffset++; renderWeekBanner(); refreshPayrollStatementTable(); });
+      nextBtn.addEventListener('click', ()=>{ weekOffset++; try{ localStorage.setItem('ustoz_week_offset', weekOffset); }catch(e){} renderWeekBanner(); refreshPayrollStatementTable(); });
     }
   }
 
@@ -2378,6 +2382,10 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
   }
 
   let payrollActiveType = 'driver';
+  try{
+    const savedType = localStorage.getItem('ustoz_payroll_type');
+    if(savedType === 'driver' || savedType === 'contractor') payrollActiveType = savedType;
+  }catch(e){}
 
   async function refreshPayrollStatementTable(){
     const rowsEl = document.getElementById('payrollStatementRows');
@@ -2461,14 +2469,26 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     const contractorTab = document.getElementById('tabContractorsPayroll');
     if(!driverTab || driverTab._wired) return;
     driverTab._wired = true;
+
+    // restore whichever tab was active before the last reload
+    if(payrollActiveType === 'contractor'){
+      driverTab.classList.remove('active');
+      contractorTab.classList.add('active');
+    } else {
+      driverTab.classList.add('active');
+      contractorTab.classList.remove('active');
+    }
+
     driverTab.addEventListener('click', ()=>{
       payrollActiveType = 'driver';
+      try{ localStorage.setItem('ustoz_payroll_type', 'driver'); }catch(e){}
       driverTab.classList.add('active');
       contractorTab.classList.remove('active');
       refreshPayrollStatementTable();
     });
     contractorTab.addEventListener('click', ()=>{
       payrollActiveType = 'contractor';
+      try{ localStorage.setItem('ustoz_payroll_type', 'contractor'); }catch(e){}
       contractorTab.classList.add('active');
       driverTab.classList.remove('active');
       refreshPayrollStatementTable();
