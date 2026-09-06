@@ -2279,6 +2279,49 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     }
   }
 
+  async function importDriverStatementPdf(driverPages){
+    try{
+      const {data: userData} = await sb.auth.getUser();
+      const user = userData && userData.user;
+      if(!user) return;
+
+      const {data: existingDrivers} = await sb.from('drivers').select('*');
+      const driverPool = existingDrivers || [];
+
+      let driverCount = 0, loadCount = 0;
+      const seenNames = new Set();
+      for(const dp of driverPages){
+        if(!dp.driverName || !dp.trips.length) continue;
+        const driver = await findOrCreateDriverByName(dp.driverName, dp.truckNumber, driverPool, selectedCompanyId, user.id);
+        if(!seenNames.has(driver.id)){ seenNames.add(driver.id); driverCount++; }
+
+        for(const trip of dp.trips){
+          const {error: insErr} = await sb.from('loads').insert({
+            user_id: user.id,
+            driver_id: driver.id,
+            pickup_date: trip.pickup_date || null,
+            delivery_date: trip.delivery_date || null,
+            broker: null,
+            load_number: trip.load_number || null,
+            from_location: trip.from_location || null,
+            to_location: trip.to_location || null,
+            base_pay: trip.base_pay || 0,
+            dhd: trip.dhd || 0,
+            mileage: trip.mileage || 0
+          });
+          if(!insErr) loadCount++;
+          else console.error('PDF yukni saqlashda xatolik:', insErr, trip);
+        }
+      }
+
+      logActivity('pdf_driver_statement_import', 'statement', `${driverCount} haydovchi, ${loadCount} yuk (PDF)`);
+      await refreshPayroll();
+      refreshLedger();
+    }catch(err){
+      console.error('PDF statement import qilishda xatolik:', err);
+    }
+  }
+
   async function loadImportPicker(){
     const wrap = document.getElementById('importPickerWrap');
     const rowsEl = document.getElementById('importPickerRows');
@@ -2963,15 +3006,70 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     return candidates[0];
   }
 
+  function detectDriverStatementPdf(pageText){
+    return /Payroll ID/i.test(pageText) && /Truck\s+\d/i.test(pageText) && /Net Amount/i.test(pageText);
+  }
+
+  function monthNameToNum(mon){
+    const m = {Jan:1,Feb:2,Mar:3,Apr:4,May:5,Jun:6,Jul:7,Aug:8,Sep:9,Oct:10,Nov:11,Dec:12};
+    return m[mon] || 1;
+  }
+
+  function toISOFromParts(mon, day, year){
+    return `${year}-${String(monthNameToNum(mon)).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+  }
+
+  function parseDriverStatementPage(pageText){
+    const nameMatch = pageText.match(/^([A-Z][A-Za-z\s]+?)\s+\d+\s+[A-Za-z0-9]/);
+    const driverName = nameMatch ? nameMatch[1].trim() : null;
+    const truckMatch = pageText.match(/Truck\s+(\d+)/);
+    const truckNumber = truckMatch ? truckMatch[1] : '';
+    const pidMatch = pageText.match(/Payroll ID\s+([\d\-]+)/);
+    const pidLabel = pidMatch ? pidMatch[1] : null;
+
+    const tripRegex = /(\d{3,6})\s+([A-Za-z0-9\-]+)\s+([A-Za-z][A-Za-z .'\-]*?,\s*[A-Z]{2})\s+([A-Za-z]{3})\s+(\d{1,2})\s+(\d{4})\s+\d{1,2}:\d{2}\s+[A-Z]{2,4}\s+([A-Za-z][A-Za-z .'\-]*?,\s*[A-Z]{2})\s+([A-Za-z]{3})\s+(\d{1,2})\s+(\d{4})\s+\d{1,2}:\d{2}\s+[A-Z]{2,4}\s+([\d,]+\.\d+)\s*mi\s+DHD:\s*([\d,]+\.\d+)\s*mi\/LDD:\s*([\d,]+\.\d+)\s*mi\s+[A-Za-z\s]*\$[\d.]+\/\$[\d.]+\s+\S*\s*\$([\d,]+\.\d+)/g;
+
+    const trips = [];
+    let m;
+    while((m = tripRegex.exec(pageText)) !== null){
+      trips.push({
+        load_number: m[1],
+        from_location: m[3].trim(),
+        pickup_date: toISOFromParts(m[4], m[5], m[6]),
+        to_location: m[7].trim(),
+        delivery_date: toISOFromParts(m[8], m[9], m[10]),
+        dhd: parseFloat(String(m[12]).replace(/,/g,'')) || 0,
+        mileage: parseFloat(String(m[13]).replace(/,/g,'')) || 0,
+        base_pay: parseFloat(String(m[14]).replace(/,/g,'')) || 0
+      });
+    }
+    return {driverName, truckNumber, pidLabel, trips};
+  }
+
   async function extractPdf(file){
     const buf = await file.arrayBuffer();
     const doc = await pdfjsLib.getDocument({data: buf}).promise;
+    const pageTexts = [];
     let text = '';
     for(let p=1; p<=doc.numPages; p++){
       const page = await doc.getPage(p);
       const content = await page.getTextContent();
-      text += ' ' + content.items.map(it=>it.str).join(' ');
+      const pageText = content.items.map(it=>it.str).join(' ');
+      pageTexts.push(pageText);
+      text += ' ' + pageText;
     }
+
+    // multi-page driver payroll statement (one driver per page, with trip tables)
+    if(pageTexts.some(detectDriverStatementPdf)){
+      const drivers = pageTexts.filter(detectDriverStatementPdf).map(parseDriverStatementPage);
+      const totalTrips = drivers.reduce((s,d)=>s+d.trips.length,0);
+      return {
+        isDriverStatement: true,
+        drivers,
+        summary: `${drivers.length} haydovchi \u00b7 ${totalTrips} yuk topildi`
+      };
+    }
+
     // find total / balance due — prefer the largest labeled amount
     const labeled = [...text.matchAll(/(Grand Total|Balance Due|Total Due|Total)\s*[:\-]?\s*\$?([\d,]+\.\d{2})/gi)];
     let amount = null;
@@ -3265,7 +3363,9 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
 
       // PDFs with a recognizable amount get pushed straight into Hisob-fakturalar
       const ext = file.name.split('.').pop().toLowerCase();
-      if(ext === 'pdf' && result.amount){
+      if(ext === 'pdf' && result.isDriverStatement){
+        await importDriverStatementPdf(result.drivers);
+      } else if(ext === 'pdf' && result.amount){
         addInvoiceRow({
           date: result.date,
           vendor: result.vendor,
