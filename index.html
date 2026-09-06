@@ -2272,12 +2272,29 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
           payout: e.payout, status: e.status
         });
         if(!insErr) entryCount++;
+
+        // also record it as a load so "All Drivers" reflects this period's Base Pay (= Trip Rate)
+        await sb.from('loads').insert({
+          user_id: user.id,
+          driver_id: driver.id,
+          pickup_date: periodStart,
+          delivery_date: periodEnd,
+          broker: null,
+          load_number: payrollStmt.pidLabel || null,
+          from_location: null,
+          to_location: null,
+          base_pay: e.trip_rate || 0,
+          dhd: 0,
+          mileage: e.trips_mileage || 0
+        });
       }
 
       msgEl.textContent = `Statement import qilindi: ${driverCount} haydovchi, ${entryCount} yozuv (PID: ${payrollStmt.pidLabel || '\u2014'}, hafta: ${periodStart} \u2014 ${periodEnd}).`;
       msgEl.classList.add('show','ok');
       logActivity('payroll_statement_import', 'payroll_period', `${stmt.file_name} \u2014 ${entryCount} yozuv`);
       refreshPayrollStatementTable();
+      await refreshPayroll();
+      refreshLedger();
     }catch(err){
       msgEl.textContent = "Import qilishda xatolik: " + (err.message || err);
       msgEl.classList.add('show','err');
