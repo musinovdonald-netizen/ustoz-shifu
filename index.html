@@ -2112,12 +2112,13 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     }));
   }
 
-  async function findOrCreateDriverByName(name, unit, existingDrivers, companyId, userId){
+  async function findOrCreateDriverByName(name, unit, existingDrivers, companyId, userId, workerType){
     const norm = name.trim().toLowerCase();
     let driver = existingDrivers.find(d => d.name.trim().toLowerCase() === norm);
     if(driver) return driver;
     const {data, error} = await sb.from('drivers').insert({
-      user_id: userId, name: name.trim(), unit_number: unit || null, company_id: companyId || null
+      user_id: userId, name: name.trim(), unit_number: unit || null, company_id: companyId || null,
+      worker_type: workerType || 'driver'
     }).select().single();
     if(error) throw error;
     existingDrivers.push(data);
@@ -2161,7 +2162,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
       const seenNames = new Set();
       for(const item of parsed){
         if(!item.driverName) continue;
-        const driver = await findOrCreateDriverByName(item.driverName, item.unit, driverPool, selectedCompanyId, user.id);
+        const driver = await findOrCreateDriverByName(item.driverName, item.unit, driverPool, selectedCompanyId, user.id, payrollActiveType);
         if(!seenNames.has(driver.id)){ seenNames.add(driver.id); driverCount++; }
         const {error: insErr} = await sb.from('loads').insert({
           user_id: user.id,
@@ -2252,7 +2253,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
       const seenNames = new Set();
       for(const e of payrollStmt.entries){
         const fullName = `${e.first_name} ${e.last_name}`.trim();
-        const driver = await findOrCreateDriverByName(fullName, e.truck_number, driverPool, selectedCompanyId, user.id);
+        const driver = await findOrCreateDriverByName(fullName, e.truck_number, driverPool, selectedCompanyId, user.id, payrollActiveType);
         if(!seenNames.has(driver.id)){ seenNames.add(driver.id); driverCount++; }
 
         const {error: insErr} = await sb.from('payroll_entries').insert({
@@ -2292,7 +2293,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
       const seenNames = new Set();
       for(const dp of driverPages){
         if(!dp.driverName || !dp.trips.length) continue;
-        const driver = await findOrCreateDriverByName(dp.driverName, dp.truckNumber, driverPool, selectedCompanyId, user.id);
+        const driver = await findOrCreateDriverByName(dp.driverName, dp.truckNumber, driverPool, selectedCompanyId, user.id, payrollActiveType);
         if(!seenNames.has(driver.id)){ seenNames.add(driver.id); driverCount++; }
 
         for(const trip of dp.trips){
