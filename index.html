@@ -1038,7 +1038,8 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
       <div class="card" style="margin-bottom:18px;">
         <div class="card-head">
           <h2>Statement'dan import qilish</h2>
-          <div style="display:flex; gap:8px;">
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <button class="btn" type="button" id="syncContractorPricesBtn">Contractor narxlarini sinxronlash</button>
             <button class="btn" type="button" id="mergeDuplicatesBtn">Duplikatlarni birlashtirish</button>
             <button class="btn btn-primary" type="button" id="openImportPickerBtn">Statement tanlash</button>
           </div>
@@ -1049,6 +1050,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
             <tbody id="importPickerRows"></tbody>
           </table>
         </div>
+        <div id="syncContractorPricesMsg" class="settings-msg" style="margin:14px 18px 0;"></div>
         <div id="mergeDuplicatesMsg" class="settings-msg" style="margin:14px 18px 0;"></div>
         <div id="importResultMsg" class="settings-msg" style="margin:0 18px 14px;"></div>
       </div>
@@ -2497,6 +2499,74 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     });
   }
 
+  async function syncContractorPricesIntoDrivers(){
+    const btn = document.getElementById('syncContractorPricesBtn');
+    const msgEl = document.getElementById('syncContractorPricesMsg');
+    if(btn) btn.disabled = true;
+    msgEl.className = 'settings-msg';
+    try{
+      const {data: allDrivers, error: dErr} = await sb.from('drivers').select('*');
+      if(dErr) throw dErr;
+      const scoped = selectedCompanyId
+        ? (allDrivers || []).filter(d => d.company_id === selectedCompanyId)
+        : (allDrivers || []);
+
+      const contractorIds = new Set(scoped.filter(d => (d.worker_type||'driver') === 'contractor').map(d=>d.id));
+      const driverIds = new Set(scoped.filter(d => (d.worker_type||'driver') === 'driver').map(d=>d.id));
+
+      if(!contractorIds.size){
+        msgEl.textContent = "Hech qanday Contractor yozuvi topilmadi \u2014 avval Contractors' Payroll tabida statement import qiling.";
+        msgEl.classList.add('show','err');
+        return;
+      }
+
+      const {data: allLoads, error: lErr} = await sb.from('loads').select('*');
+      if(lErr) throw lErr;
+
+      // build a lookup of the "true" price from contractor-side loads, keyed by LOAD ID#
+      const priceByLoadNumber = {};
+      (allLoads||[]).forEach(l=>{
+        if(contractorIds.has(l.driver_id) && l.load_number){
+          const key = String(l.load_number).trim();
+          priceByLoadNumber[key] = {base_pay: l.base_pay, broker: l.broker};
+        }
+      });
+
+      let matched = 0, updated = 0;
+      for(const l of (allLoads||[])){
+        if(!driverIds.has(l.driver_id) || !l.load_number) continue;
+        const key = String(l.load_number).trim();
+        const truth = priceByLoadNumber[key];
+        if(!truth) continue;
+        matched++;
+        if(Number(l.base_pay) !== Number(truth.base_pay) || (truth.broker && l.broker !== truth.broker)){
+          const {error: upErr} = await sb.from('loads').update({
+            base_pay: truth.base_pay,
+            broker: truth.broker || l.broker
+          }).eq('id', l.id);
+          if(!upErr) updated++;
+        }
+      }
+
+      if(matched === 0){
+        msgEl.textContent = "Mos LOAD ID# topilmadi \u2014 Driver va Contractor yuklarida bir xil Load ID# borligiga ishonch hosil qiling.";
+        msgEl.classList.add('show','err');
+      } else {
+        msgEl.textContent = `${matched} ta yuk moslashtirildi, ${updated} tasi yangilandi (narx Contractors ma'lumotidan olindi).`;
+        msgEl.classList.add('show','ok');
+        logActivity('sync_contractor_prices', 'load', `${updated} yuk narxi yangilandi`);
+      }
+
+      await refreshPayroll();
+      refreshLedger();
+    }catch(err){
+      msgEl.textContent = "Sinxronlashda xatolik: " + (err.message || err);
+      msgEl.classList.add('show','err');
+    }finally{
+      if(btn) btn.disabled = false;
+    }
+  }
+
   async function mergeDuplicateDrivers(){
     const btn = document.getElementById('mergeDuplicatesBtn');
     const msgEl = document.getElementById('mergeDuplicatesMsg');
@@ -2584,6 +2654,11 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     if(mergeBtn && !mergeBtn._wired){
       mergeBtn._wired = true;
       mergeBtn.addEventListener('click', mergeDuplicateDrivers);
+    }
+    const syncBtn = document.getElementById('syncContractorPricesBtn');
+    if(syncBtn && !syncBtn._wired){
+      syncBtn._wired = true;
+      syncBtn.addEventListener('click', syncContractorPricesIntoDrivers);
     }
     const refreshBtn = document.getElementById('refreshStatementBtn');
     if(refreshBtn && !refreshBtn._wired){
