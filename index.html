@@ -1039,6 +1039,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
         <div class="card-head">
           <h2>Statement'dan import qilish</h2>
           <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <button class="btn" type="button" id="clearTypeLoadsBtn" style="color:var(--alert); border-color:rgba(193,68,60,.35);">Yuklarni tozalash</button>
             <button class="btn" type="button" id="syncContractorPricesBtn">Contractor narxlarini sinxronlash</button>
             <button class="btn" type="button" id="mergeDuplicatesBtn">Duplikatlarni birlashtirish</button>
             <button class="btn btn-primary" type="button" id="openImportPickerBtn">Statement tanlash</button>
@@ -1050,6 +1051,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
             <tbody id="importPickerRows"></tbody>
           </table>
         </div>
+        <div id="clearLoadsMsg" class="settings-msg" style="margin:14px 18px 0;"></div>
         <div id="syncContractorPricesMsg" class="settings-msg" style="margin:14px 18px 0;"></div>
         <div id="mergeDuplicatesMsg" class="settings-msg" style="margin:14px 18px 0;"></div>
         <div id="importResultMsg" class="settings-msg" style="margin:0 18px 14px;"></div>
@@ -2515,6 +2517,43 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     });
   }
 
+  async function clearLoadsForActiveType(){
+    const btn = document.getElementById('clearTypeLoadsBtn');
+    const msgEl = document.getElementById('clearLoadsMsg');
+    const typeLabel = payrollActiveType === 'contractor' ? 'Contractor' : 'Driver';
+    if(!confirm(`Barcha ${typeLabel} turidagi yuklar o'chiriladi (haydovchilarning o'zi qoladi). Davom etasizmi?`)) return;
+    if(btn) btn.disabled = true;
+    msgEl.className = 'settings-msg';
+    try{
+      const {data: allDrivers, error: dErr} = await sb.from('drivers').select('*');
+      if(dErr) throw dErr;
+      const scoped = selectedCompanyId
+        ? (allDrivers || []).filter(d => d.company_id === selectedCompanyId)
+        : (allDrivers || []);
+      const targetIds = scoped.filter(d => (d.worker_type||'driver') === payrollActiveType).map(d=>d.id);
+
+      if(!targetIds.length){
+        msgEl.textContent = `${typeLabel} turidagi hech qanday haydovchi topilmadi.`;
+        msgEl.classList.add('show','err');
+        return;
+      }
+
+      const {error: delErr, count} = await sb.from('loads').delete({count:'exact'}).in('driver_id', targetIds);
+      if(delErr) throw delErr;
+
+      msgEl.textContent = `${typeLabel} turidagi yuklar tozalandi (${count ?? 0} ta o'chirildi). Endi statement'ni qayta import qiling.`;
+      msgEl.classList.add('show','ok');
+      logActivity('clear_loads', 'load', `${typeLabel} yuklari tozalandi`);
+      await refreshPayroll();
+      refreshLedger();
+    }catch(err){
+      msgEl.textContent = "Tozalashda xatolik: " + (err.message || err);
+      msgEl.classList.add('show','err');
+    }finally{
+      if(btn) btn.disabled = false;
+    }
+  }
+
   async function syncContractorPricesIntoDrivers(){
     const btn = document.getElementById('syncContractorPricesBtn');
     const msgEl = document.getElementById('syncContractorPricesMsg');
@@ -2675,6 +2714,11 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     if(syncBtn && !syncBtn._wired){
       syncBtn._wired = true;
       syncBtn.addEventListener('click', syncContractorPricesIntoDrivers);
+    }
+    const clearBtn = document.getElementById('clearTypeLoadsBtn');
+    if(clearBtn && !clearBtn._wired){
+      clearBtn._wired = true;
+      clearBtn.addEventListener('click', clearLoadsForActiveType);
     }
     const refreshBtn = document.getElementById('refreshStatementBtn');
     if(refreshBtn && !refreshBtn._wired){
