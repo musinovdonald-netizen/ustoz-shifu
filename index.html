@@ -3185,7 +3185,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     let m;
     while((m = tripRegex.exec(pageText)) !== null){
       trips.push({
-        load_number: m[1],
+        load_number: m[2],
         from_location: m[3].trim(),
         pickup_date: toISOFromParts(m[4], m[5], m[6]),
         to_location: m[7].trim(),
