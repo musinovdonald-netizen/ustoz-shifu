@@ -1166,6 +1166,21 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
       </div>
 
       <div class="card" style="margin-top:18px;">
+        <div class="card-head"><h2>Yuklangan fayllar tarixi</h2></div>
+        <table>
+          <thead><tr><th>Fayl</th><th>Turi</th><th>Natija</th><th>Yuklangan</th></tr></thead>
+          <tbody id="uploadHistoryRows"></tbody>
+        </table>
+        <div class="empty" id="uploadHistoryEmpty">
+          <div class="empty-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="9"/></svg>
+          </div>
+          <h3>Hali fayl yuklanmagan</h3>
+          <p>PDF, Excel yoki CSV fayl yuklaganingizda, u shu yerda (turi va natijasi bilan) doimiy saqlanadi.</p>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:18px;">
         <div class="card-head"><h2>Saqlangan statementlar</h2></div>
         <table>
           <thead><tr><th>Fayl</th><th>Varaq</th><th>Qatorlar</th><th>Yuklangan</th><th></th></tr></thead>
@@ -1529,6 +1544,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     refreshActivityLog();
     setupStatementViewer();
     refreshStatementsList();
+    refreshUploadHistory();
     initApp._ran = true;
   }
 
@@ -2754,6 +2770,44 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
   }
 
   // ---------- Statements (saved CSV/XLSX table data) ----------
+  // ---------- Upload history (persists every processed file, including PDFs) ----------
+  async function logUploadHistory(fileName, fileType, summary){
+    try{
+      const {data: userData} = await sb.auth.getUser();
+      const user = userData && userData.user;
+      if(!user) return;
+      await sb.from('document_uploads').insert({
+        user_id: user.id, file_name: fileName, file_type: fileType, summary: summary
+      });
+      refreshUploadHistory();
+    }catch(err){
+      console.error('Fayl tarixini yozishda xatolik:', err);
+    }
+  }
+
+  async function refreshUploadHistory(){
+    const rowsEl = document.getElementById('uploadHistoryRows');
+    const emptyEl = document.getElementById('uploadHistoryEmpty');
+    if(!rowsEl) return;
+    try{
+      const {data, error} = await sb.from('document_uploads').select('*').order('created_at', {ascending:false}).limit(50);
+      if(error) throw error;
+      if(!data || !data.length){
+        rowsEl.innerHTML = '';
+        emptyEl.style.display = 'flex';
+        return;
+      }
+      emptyEl.style.display = 'none';
+      rowsEl.innerHTML = data.map(d=>{
+        const dt = new Date(d.created_at);
+        const dateStr = dt.toLocaleString('uz-UZ', {day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit'});
+        return `<tr><td>${d.file_name}</td><td>${(d.file_type||'').toUpperCase()}</td><td>${d.summary||''}</td><td class="mono">${dateStr}</td></tr>`;
+      }).join('');
+    }catch(err){
+      console.error('Fayl tarixini yuklashda xatolik:', err);
+    }
+  }
+
   async function saveStatement(fileName, sheetName, columns, rows){
     try{
       const {data: userData} = await sb.auth.getUser();
@@ -3476,6 +3530,9 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
       if((ext === 'csv' || ext === 'xlsx' || ext === 'xls') && result.columns && result.rows){
         saveStatement(file.name, result.sheetName, result.columns, result.rows);
       }
+
+      // every processed file gets a permanent history entry, regardless of type
+      logUploadHistory(file.name, ext, result.summary);
 
       i++;
       processNext();
