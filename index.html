@@ -1097,6 +1097,18 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
 
     <!-- ALL DRIVERS PANEL -->
     <section class="panel" id="panel-all-drivers">
+      <div class="card" style="margin-bottom:18px; padding:12px 16px;">
+        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+          <input type="search" id="driversSearch" autocomplete="off" placeholder="Qidirish: ism, unit, LOAD ID#, broker, From / To, sana..."
+            style="flex:1; min-width:220px; font-family:'IBM Plex Sans',sans-serif; font-size:14px; padding:9px 12px; border-radius:8px; border:1px solid var(--line); background:var(--paper); color:var(--text);">
+          <button class="btn" type="button" id="driversSearchClear">Tozalash</button>
+          <span id="driversSearchCount" style="font-size:12.5px; color:var(--steel);"></span>
+        </div>
+      </div>
+      <div class="card empty" id="driversSearchEmpty" style="display:none;">
+        <h3>Hech narsa topilmadi</h3>
+        <p>Boshqa so'z bilan qidirib ko'ring yoki "Tozalash" tugmasini bosing.</p>
+      </div>
       <div id="driversContainer"></div>
 
       <div class="card empty" id="payrollEmpty">
@@ -1946,14 +1958,58 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
         });
       }
 
+      const searchKeys = [];
       drivers.forEach(driver=>{
         const driverLoads = driver._placeholder ? [] : (loads || []).filter(l => l.driver_id === driver.id);
-        driversContainer.appendChild(renderDriverCard(driver, driverLoads));
+        const card = renderDriverCard(driver, driverLoads);
+        const key = [
+          driver.name, driver.unit_number, driver.unit_number ? 'unit#' + driver.unit_number : '', driver._companyName,
+          ...driverLoads.flatMap(l => [l.load_number, l.broker, l.from_location, l.to_location, fmtDotDate(l.pickup_date), fmtDotDate(l.delivery_date)])
+        ].filter(v => v !== null && v !== undefined && v !== '').join(' ').toLowerCase();
+        card.dataset.search = key;
+        searchKeys.push(key);
+        driversContainer.appendChild(card);
       });
+      // jadvaldagi qatorlar drivers bilan bir xil tartibda: ularga ham shu kalitni beramiz
+      if(summaryRows){
+        summaryRows.querySelectorAll('tr').forEach((tr, i)=>{ tr.dataset.search = searchKeys[i] || ''; });
+      }
+      applyDriverSearch();
     }catch(err){
       console.error('Payroll yuklashda xatolik:', err);
     }
   }
+
+  // All Drivers qidiruvi: faqat ko'rinishni filtrlaydi (tartib va ma'lumot o'zgarmaydi)
+  function applyDriverSearch(){
+    const inp = document.getElementById('driversSearch');
+    const countEl = document.getElementById('driversSearchCount');
+    const emptyEl = document.getElementById('driversSearchEmpty');
+    const terms = ((inp && inp.value) || '').trim().toLowerCase().split(/\s+/).filter(Boolean);
+    const matches = el => { const hay = el.dataset.search || ''; return terms.every(t => hay.includes(t)); };
+    const cards = Array.from(driversContainer.children);
+    let shown = 0;
+    cards.forEach(c=>{
+      const ok = !terms.length || matches(c);
+      c.style.display = ok ? '' : 'none';
+      if(ok) shown++;
+    });
+    document.querySelectorAll('#payrollSummaryRows tr').forEach(tr=>{
+      tr.style.display = (!terms.length || matches(tr)) ? '' : 'none';
+    });
+    if(countEl) countEl.textContent = terms.length ? `${shown} / ${cards.length} topildi` : '';
+    if(emptyEl) emptyEl.style.display = (terms.length && cards.length && shown === 0) ? 'flex' : 'none';
+  }
+  (function setupDriversSearch(){
+    const inp = document.getElementById('driversSearch');
+    const clearBtn = document.getElementById('driversSearchClear');
+    if(!inp) return;
+    inp.addEventListener('input', applyDriverSearch);
+    inp.addEventListener('keydown', e=>{
+      if(e.key === 'Escape'){ inp.value = ''; applyDriverSearch(); }
+    });
+    if(clearBtn) clearBtn.addEventListener('click', ()=>{ inp.value = ''; applyDriverSearch(); inp.focus(); });
+  })();
 
   // ---------- Companies ----------
   let selectedCompanyId = null;
