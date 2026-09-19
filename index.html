@@ -2740,16 +2740,12 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
       const unit = document.getElementById('driverUnit').value.trim();
       const workerType = document.getElementById('driverWorkerType').value || 'driver';
       if(!name) return;
-      if(!selectedCompanyId){
-        alert("Avval kompaniya tanlang yoki yangi kompaniya qo'shing.");
-        return;
-      }
       try{
         const {data: userData} = await sb.auth.getUser();
         const user = userData && userData.user;
         if(!user) return;
         const {error} = await sb.from('drivers').insert({
-          user_id: user.id, name, unit_number: unit || null, company_id: selectedCompanyId, worker_type: workerType
+          user_id: user.id, name, unit_number: unit || null, company_id: selectedCompanyId || null, worker_type: workerType
         });
         if(error) throw error;
         addDriverForm.reset();
@@ -3138,6 +3134,14 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
     panel.classList.add('active');
     try{ localStorage.setItem('ustoz_active_panel', panelName); }catch(e){}
+    // All Drivers ekranida kompaniya tanlagichi ko'rinmaydi
+    const hideCompany = (panelName === 'all-drivers');
+    ['companySelect','addCompanyBtn'].forEach(id=>{
+      const el = document.getElementById(id);
+      if(el) el.style.display = hideCompany ? 'none' : '';
+    });
+    const addCompanyFormEl = document.getElementById('addCompanyForm');
+    if(addCompanyFormEl && hideCompany) addCompanyFormEl.style.display = 'none';
     return true;
   }
   items.forEach(item=>{
