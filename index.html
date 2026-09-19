@@ -1793,6 +1793,48 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     return card;
   }
 
+  // ---------- Fixed truck order (ORDER MUST NOT CHANGE) ----------
+  // All Drivers: avval One Ummah trucklari, keyin Fastmover + ECA trucklari.
+  // Har bir guruh ichida tartib aynan shu ro'yxatdagidek qoladi.
+  const ONE_UMMAH_UNITS = [
+    '012', '014', '0992', '0955', '016', '015', '010', '0910', '3812', '9605', '6059', '6281',
+    '5909', '1739', '1744', '5992', '4278', '6348', '4809', '018', '3411', '6314', '4866'
+  ];
+  const FASTMOVER_ECA_UNITS = [
+    '0007', '0008', '1081', '0010', '0012', '1789', '5948', '3994', '0011', '1735', '3365', '6387',
+    '6489', '1047', '0143', '0988', '1143', '5889', '1116', '5969', '1447', '1329', '1129', '1176',
+    '1399', '1246', '6014', '6030', '56', '5914', '5949', '5964', '6685', '6702', '6716', '6733',
+    '6739', '6718', '6722', '6724', '6783', '9252', '9261', '9268', '9304', '1030', '3848', '5951',
+    '3500', '5578', '6008', '5892', '5947', '4156', '4221', '4028', '6328', '6391', '1910', '6695',
+    '5870', '5893', '3827', '6169', '3618', '6113', '3071', '3756', '3524', '3896', '6432', '3764',
+    '4140', '4252', '1998', '5478', '6649', '7499', '5844', '6203', '6204', '7518', '7496', '6234',
+    '7505', '7520', '7502', '7506', '4790', '7503', '7498', '7524', '7501'
+  ];
+  const UNIT_ORDER = (()=>{
+    const m = new Map();
+    ONE_UMMAH_UNITS.forEach((u,i)=>{ if(!m.has(u)) m.set(u, {group:0, idx:i, label:'One Ummah'}); });
+    FASTMOVER_ECA_UNITS.forEach((u,i)=>{ if(!m.has(u)) m.set(u, {group:1, idx:i, label:'Fastmover / ECA'}); });
+    return m;
+  })();
+  function normUnit(u){
+    return String(u == null ? '' : u).trim().replace(/^unit\s*#?\s*/i, '').trim();
+  }
+  function unitOrderInfo(u){
+    return UNIT_ORDER.get(normUnit(u)) || null;
+  }
+  // group 0 = One Ummah, 1 = Fastmover/ECA, 2 = ro'yxatda yo'q unitlar (oxirida, eski tartibda)
+  function sortDriversByFixedOrder(list){
+    return list
+      .map((d,i)=>({d, i, info: unitOrderInfo(d.unit_number)}))
+      .sort((a,b)=>{
+        const ga = a.info ? a.info.group : 2, gb = b.info ? b.info.group : 2;
+        if(ga !== gb) return ga - gb;
+        if(ga < 2 && a.info.idx !== b.info.idx) return a.info.idx - b.info.idx;
+        return a.i - b.i;
+      })
+      .map(x=>x.d);
+  }
+
   async function refreshPayroll(){
     try{
       const [{data: allDrivers, error: dErr}, {data: loads, error: lErr}, {data: companiesData}] = await Promise.all([
@@ -1807,9 +1849,14 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
       (companiesData || []).forEach(c => { companyNames[c.id] = c.name; });
 
       // All Drivers: show every driver across all companies (no company split)
-      const drivers = (allDrivers || [])
-        .filter(d => (d.worker_type || 'driver') === 'driver')
-        .map(d => Object.assign({}, d, {_companyName: companyNames[d.company_id] || ''}));
+      const drivers = sortDriversByFixedOrder(
+        (allDrivers || [])
+          .filter(d => (d.worker_type || 'driver') === 'driver')
+          .map(d => {
+            const info = unitOrderInfo(d.unit_number);
+            return Object.assign({}, d, {_companyName: info ? info.label : (companyNames[d.company_id] || '')});
+          })
+      );
 
       const summaryRows = document.getElementById('payrollSummaryRows');
       const summaryCard = document.getElementById('payrollSummaryCard');
