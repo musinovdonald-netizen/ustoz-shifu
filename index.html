@@ -1588,6 +1588,16 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
 
   function fmtMoney(n){ return '$' + Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2, maximumFractionDigits:2}); }
   function fmtNum(n){ return Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2, maximumFractionDigits:2}); }
+  // Sanani PDF'dagidek MM.DD.YYYY ko'rinishida ko'rsatadi (faqat ko'rinish, bazadagi qiymat o'zgarmaydi)
+  function fmtDotDate(v){
+    if(v === null || v === undefined || v === '') return '';
+    const str = String(v).trim();
+    let m = str.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:[T\s].*)?$/);            // 2026-09-08 (yoki vaqt bilan)
+    if(m) return `${m[2].padStart(2,'0')}.${m[3].padStart(2,'0')}.${m[1]}`;
+    m = str.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4})$/);              // 09/08/2026, 09.08.2026, 09-08-2026
+    if(m) return `${m[1].padStart(2,'0')}.${m[2].padStart(2,'0')}.${m[3]}`;
+    return str;
+  }
   function calcRpm(pay, mileage, dhd){
     const denom = Number(mileage||0) + Number(dhd||0);
     return denom > 0 ? (Number(pay||0)/denom) : 0;
@@ -1596,6 +1606,40 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
   function renderDriverCard(driver, loads){
     const card = document.createElement('div');
     card.className = 'driver-card';
+    if(driver._placeholder){
+      // ro'yxatdagi unit, lekin bazada haydovchi/yuk yo'q: PDF'dagidek bo'sh jadval va Total $0.00
+      card.dataset.unit = driver.unit_number;
+      card.innerHTML = `
+        <div class="driver-head">
+          <div class="driver-head-fm">FM</div>
+          <div class="driver-head-name">—</div>
+          <div class="driver-head-unit">Unit#${driver.unit_number}</div>
+          ${driver._companyName ? `<div class="driver-company-tag">${driver._companyName}</div>` : ''}
+        </div>
+        <div class="loads-table-wrap">
+          <table class="loads-table payroll-table">
+            <thead>
+              <tr>
+                <th>№</th><th>Pick up date</th><th>Delivery date</th><th>Broker</th><th>LOAD ID#</th><th>From</th><th>To</th>
+                <th>Base Pay</th><th>DHD</th><th>Mileage</th><th>Total Mileage</th><th>RPM</th><th></th>
+              </tr>
+            </thead>
+            <tbody class="loads-tbody"></tbody>
+            <tfoot>
+              <tr>
+                <td colspan="7">Total</td>
+                <td class="mono">${fmtMoney(0)}</td>
+                <td class="mono">${fmtNum(0)}</td>
+                <td class="mono">${fmtNum(0)}</td>
+                <td class="mono">${fmtNum(0)}</td>
+                <td class="mono">$0.00</td>
+                <td></td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>`;
+      return card;
+    }
     card.dataset.driverId = driver.id;
 
     const totalPay = loads.reduce((s,l)=>s+Number(l.base_pay||0),0);
@@ -1610,8 +1654,8 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
       return `
         <tr data-load-id="${l.id}">
           <td class="mono">${idx+1}</td>
-          <td class="mono">${l.pickup_date || '—'}</td>
-          <td class="mono">${l.delivery_date || '—'}</td>
+          <td class="mono">${fmtDotDate(l.pickup_date) || '—'}</td>
+          <td class="mono">${fmtDotDate(l.delivery_date) || '—'}</td>
           <td>${l.broker || '—'}</td>
           <td class="mono">${l.load_number || '—'}</td>
           <td>${l.from_location || '—'}</td>
@@ -1849,14 +1893,18 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
       (companiesData || []).forEach(c => { companyNames[c.id] = c.name; });
 
       // All Drivers: show every driver across all companies (no company split)
-      const drivers = sortDriversByFixedOrder(
-        (allDrivers || [])
-          .filter(d => (d.worker_type || 'driver') === 'driver')
-          .map(d => {
-            const info = unitOrderInfo(d.unit_number);
-            return Object.assign({}, d, {_companyName: info ? info.label : (companyNames[d.company_id] || '')});
-          })
-      );
+      const realDrivers = (allDrivers || [])
+        .filter(d => (d.worker_type || 'driver') === 'driver')
+        .map(d => {
+          const info = unitOrderInfo(d.unit_number);
+          return Object.assign({}, d, {_companyName: info ? info.label : (companyNames[d.company_id] || '')});
+        });
+      // ro'yxatdagi har bir unit ko'rinib turishi kerak: haydovchisi umuman yo'q unitlar uchun bo'sh joy
+      const presentUnits = new Set((allDrivers || []).map(d => normUnit(d.unit_number)).filter(Boolean));
+      const placeholders = [...ONE_UMMAH_UNITS, ...FASTMOVER_ECA_UNITS]
+        .filter(u => !presentUnits.has(u))
+        .map(u => ({id: null, name: '', unit_number: u, _placeholder: true, _companyName: unitOrderInfo(u).label}));
+      const drivers = sortDriversByFixedOrder(realDrivers.concat(placeholders));
 
       const summaryRows = document.getElementById('payrollSummaryRows');
       const summaryCard = document.getElementById('payrollSummaryCard');
@@ -1873,20 +1921,20 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
 
       if(summaryRows){
         summaryRows.innerHTML = drivers.map(driver=>{
-          const dLoads = (loads || []).filter(l => l.driver_id === driver.id);
+          const dLoads = driver._placeholder ? [] : (loads || []).filter(l => l.driver_id === driver.id);
           const pay = dLoads.reduce((s,l)=>s+Number(l.base_pay||0),0);
           const mi = dLoads.reduce((s,l)=>s+Number(l.mileage||0),0);
           const dhd = dLoads.reduce((s,l)=>s+Number(l.dhd||0),0);
           const rpm = calcRpm(pay, mi, dhd);
           return `
             <tr>
-              <td class="summary-driver-name">${driver.name}${driver._companyName ? `<div class="driver-company-tag">${driver._companyName}</div>` : ''}</td>
+              <td class="summary-driver-name">${driver.name || '—'}${driver._companyName ? `<div class="driver-company-tag">${driver._companyName}</div>` : ''}</td>
               <td>${driver.unit_number ? `<span class="truck-badge">${driver.unit_number}</span>` : '—'}</td>
               <td class="mono">${fmtNum(mi + dhd)} mi</td>
               <td class="mono">$${rpm.toFixed(2)}/mi</td>
               <td class="mono summary-earning">${fmtMoney(pay)}</td>
               <td class="mono summary-earning">${fmtMoney(pay)}</td>
-              <td><button class="view-details-link" type="button" data-scroll-driver="${driver.id}">Batafsil \u2192</button></td>
+              <td>${driver._placeholder ? '' : `<button class="view-details-link" type="button" data-scroll-driver="${driver.id}">Batafsil \u2192</button>`}</td>
             </tr>`;
         }).join('');
 
@@ -1899,7 +1947,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
       }
 
       drivers.forEach(driver=>{
-        const driverLoads = (loads || []).filter(l => l.driver_id === driver.id);
+        const driverLoads = driver._placeholder ? [] : (loads || []).filter(l => l.driver_id === driver.id);
         driversContainer.appendChild(renderDriverCard(driver, driverLoads));
       });
     }catch(err){
