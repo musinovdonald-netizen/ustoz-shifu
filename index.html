@@ -499,6 +499,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     padding:2px 8px;
   }
   .summary-driver-name{font-weight:600;}
+  .driver-company-tag{font-size:11.5px; font-weight:500; color:var(--steel); margin-top:2px;}
   .summary-earning{font-weight:600; color:var(--route-green);}
   .balances-cell{font-size:11.5px; line-height:1.6; white-space:nowrap;}
   .balances-cell .bal-label{color:var(--steel); margin-right:4px;}
@@ -1660,6 +1661,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
         <div class="driver-head-fm">FM</div>
         <div class="driver-head-name">${driver.name}</div>
         <div class="driver-head-unit">${driver.unit_number ? `Unit#${driver.unit_number}` : ''}</div>
+        ${driver._companyName ? `<div class="driver-company-tag">${driver._companyName}</div>` : ''}
         <div class="driver-actions">
           <button class="btn toggle-load-form-btn" type="button">+ Yuk qo'shish</button>
           <button class="icon-btn delete-driver-btn" title="Haydovchini o'chirish" type="button">
@@ -1817,16 +1819,21 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
 
   async function refreshPayroll(){
     try{
-      const [{data: allDrivers, error: dErr}, {data: loads, error: lErr}] = await Promise.all([
+      const [{data: allDrivers, error: dErr}, {data: loads, error: lErr}, {data: companiesData}] = await Promise.all([
         sb.from('drivers').select('*').order('created_at', {ascending: true}),
-        sb.from('loads').select('*').order('pickup_date', {ascending: true})
+        sb.from('loads').select('*').order('pickup_date', {ascending: true}),
+        sb.from('companies').select('id,name')
       ]);
       if(dErr) throw dErr;
       if(lErr) throw lErr;
 
+      const companyNames = {};
+      (companiesData || []).forEach(c => { companyNames[c.id] = c.name; });
+
       // All Drivers: show every driver across all companies (no company split)
       const drivers = (allDrivers || [])
-        .filter(d => (d.worker_type || 'driver') === 'driver');
+        .filter(d => (d.worker_type || 'driver') === 'driver')
+        .map(d => Object.assign({}, d, {_companyName: companyNames[d.company_id] || ''}));
 
       const summaryRows = document.getElementById('payrollSummaryRows');
       const summaryCard = document.getElementById('payrollSummaryCard');
@@ -1850,7 +1857,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
           const rpm = calcRpm(pay, mi, dhd);
           return `
             <tr>
-              <td class="summary-driver-name">${driver.name}</td>
+              <td class="summary-driver-name">${driver.name}${driver._companyName ? `<div class="driver-company-tag">${driver._companyName}</div>` : ''}</td>
               <td>${driver.unit_number ? `<span class="truck-badge">${driver.unit_number}</span>` : '—'}</td>
               <td class="mono">${fmtNum(mi + dhd)} mi</td>
               <td class="mono">$${rpm.toFixed(2)}/mi</td>
