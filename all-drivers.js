@@ -121,6 +121,7 @@
     var iEmpty = findIdx(columns, [/empty\s*mi/i]);
     var iLoaded = findIdx(columns, [/loaded\s*mi/i]);
     var iAppt = findIdx(columns, [/appt\s*date/i]);
+    var iBook = findIdx(columns, [/^booked\s*for$/i]);
 
     // Har yuk 2+ qatorda: birinchi qatorda Trip #, keyingilarida bo'sh
     var trips = [], cur = null;
@@ -153,6 +154,7 @@
         pickup: parseDate(first[iAppt]),
         delivery: parseDate(last[iAppt]),
         broker: iBill >= 0 ? String(first[iBill] || '').trim() : '',
+        booked_for: iBook >= 0 ? String(first[iBook] || '').trim() : '',
         load_number: iRef >= 0 ? String(first[iRef] == null ? '' : first[iRef]).trim() : '',
         from_location: city(first), to_location: city(last),
         base_pay: rate, dhd: dhd, mileage: mileage, stops: t.legs.length
@@ -253,10 +255,91 @@
     var byUnit = {};
     loads.forEach(function (l) { byUnit[l.unit] = (byUnit[l.unit] || 0) + l.base_pay; });
     var sumUnits = Object.keys(byUnit).reduce(function (s, k) { return s + byUnit[k]; }, 0);
+    var byCo = { FM: 0, OU: 0, ECA: 0 }, noCo = 0;
+    loads.forEach(function (l) { var c = companyOf(l.booked_for); if (c) byCo[c] += l.base_pay; else noCo += l.base_pay; });
+    if (noCo > 0.004) suspects.push({ title: 'Kompaniyasi (Booked For) aniqlanmagan yuklar', items: [money(noCo) + ' summadagi yuklar FM/OU/ECA yig\'indisiga kirmaydi'] });
+    else clean.push('Booked For bo\'yicha: FM ' + money(byCo.FM) + ', OU ' + money(byCo.OU) + ', ECA ' + money(byCo.ECA));
     if (Math.abs(total - sumUnits) < 0.005) clean.push('Jami mos: ' + loads.length + ' yuk, ' + money(total));
     else errors.push({ title: 'Jami mos kelmadi', items: [money(total) + ' ≠ ' + money(sumUnits)] });
 
     return { errors: errors, suspects: suspects, clean: clean, total: total };
+  }
+
+
+  /* ------------------------- Total hisob-kitob (FM / OU / ECA) ------------------------- */
+  var COMPANIES = [
+    { key: 'FM', label: 'DAT brokers FM', bg: 'D9E7F7', argb: 'FFD9E7F7' },
+    { key: 'OU', label: 'DAT brokers OU', bg: 'FFFF00', argb: 'FFFFFF00' },
+    { key: 'ECA', label: 'DAT brokers ECA', bg: 'FFA500', argb: 'FFFFA500' }
+  ];
+  function companyOf(txt) {
+    var t = String(txt || '');
+    if (/fastmover/i.test(t)) return 'FM';
+    if (/one\s*ummah/i.test(t)) return 'OU';
+    if (/\be\s*\.?\s*c\s*\.?\s*a\b/i.test(t)) return 'ECA';
+    return null;
+  }
+  var sumKey = function (week) { return 'ustoz_ad_summary_' + dKey(week.start); };
+  function readInputs(week) {
+    try { return JSON.parse(localStorage.getItem(sumKey(week)) || '{}'); } catch (e) { return {}; }
+  }
+  function writeInputs(week, obj) {
+    try { localStorage.setItem(sumKey(week), JSON.stringify(obj)); } catch (e) { }
+  }
+  // Natija: qatorlar (Gross avtomatik, RTS/Previous/Note qo'lda), Total va aniqlanmagan Gross
+  function getSummary(weekLoads, week) {
+    var inp = readInputs(week), gross = { FM: 0, OU: 0, ECA: 0 }, unknown = 0;
+    weekLoads.forEach(function (l) {
+      var c = companyOf(l.booked_for), v = Number(l.base_pay || 0);
+      if (c) gross[c] += v; else unknown += v;
+    });
+    var rows = COMPANIES.map(function (c) {
+      var i = inp[c.key] || {};
+      var rts = num(i.rts), prev = num(i.prev);
+      return { key: c.key, label: c.label, bg: c.bg, argb: c.argb, gross: gross[c.key], rts: rts, prev: prev,
+        rtsRaw: i.rts == null ? '' : i.rts, prevRaw: i.prev == null ? '' : i.prev, note: i.note || '', diff: gross[c.key] - rts - prev };
+    });
+    var tot = rows.reduce(function (a, r) { a.gross += r.gross; a.rts += r.rts; a.prev += r.prev; a.diff += r.diff; return a; }, { gross: 0, rts: 0, prev: 0, diff: 0 });
+    return { rows: rows, total: tot, unknown: unknown, week: week };
+  }
+  function ensureSummaryCard() {
+    var card = document.getElementById('adSummaryCard');
+    if (!card) {
+      card = document.createElement('div');
+      card.id = 'adSummaryCard'; card.className = 'card'; card.style.marginTop = '18px';
+      driversContainer.parentNode.insertBefore(card, driversContainer.nextSibling);
+    }
+    return card;
+  }
+  function renderSummary(weekLoads, week) {
+    var card = ensureSummaryCard();
+    var sm = getSummary(weekLoads, week);
+    var inpStyle = 'width:130px;padding:6px 8px;border-radius:6px;border:1px solid var(--line);background:#fff;color:#14213D;text-align:right;font-family:"IBM Plex Mono",monospace;';
+    var rows = sm.rows.map(function (r) {
+      return '<tr><td style="background:#' + r.bg + ';color:#14213D;font-weight:700">' + r.label + '</td>' +
+        '<td class="mono" data-g="' + r.key + '">' + money(r.gross) + '</td>' +
+        '<td><input type="number" step="0.01" data-k="' + r.key + '" data-f="rts" value="' + esc(r.rtsRaw) + '" style="' + inpStyle + '"></td>' +
+        '<td><input type="number" step="0.01" data-k="' + r.key + '" data-f="prev" value="' + esc(r.prevRaw) + '" style="' + inpStyle + '"></td>' +
+        '<td class="mono" data-d="' + r.key + '">' + money(r.diff) + '</td>' +
+        '<td><input type="text" data-k="' + r.key + '" data-f="note" value="' + esc(r.note) + '" style="' + inpStyle.replace('130px', '160px').replace('text-align:right', 'text-align:left') + '"></td></tr>';
+    }).join('');
+    card.innerHTML = '<div class="card-head"><h2>Total hisob-kitob · ' + esc(week.title) + '</h2></div>' +
+      '<div class="loads-table-wrap"><table class="loads-table" style="min-width:760px"><thead><tr><th>Companies</th><th>Total Gross amount</th><th>RTS paid</th><th>Previous week</th><th>Difference</th><th>Note</th></tr></thead><tbody>' + rows +
+      '<tr><td style="background:#1ABC9C;color:#14213D;font-weight:700;font-size:15px">Total:</td><td class="mono" style="font-weight:700" data-tg>' + money(sm.total.gross) + '</td><td class="mono" style="font-weight:700" data-tr>' + money(sm.total.rts) + '</td><td class="mono" style="font-weight:700" data-tp>' + money(sm.total.prev) + '</td><td class="mono" style="font-weight:700" data-td>' + money(sm.total.diff) + '</td><td></td></tr></tbody></table></div>' +
+      (sm.unknown > 0.004 ? '<p style="margin:10px 18px 14px;color:var(--alert);font-size:12.5px">Kompaniyasi (Booked For) aniqlanmagan yuklar: ' + money(sm.unknown) + '. Ular FM/OU/ECA yig\'indisiga kirmagan. Statementni qayta import qiling.</p>' : '<div style="height:10px"></div>');
+    var recalc = function () {
+      var inp = {};
+      card.querySelectorAll('input').forEach(function (el) {
+        var k = el.dataset.k, f = el.dataset.f; (inp[k] = inp[k] || {})[f] = el.value;
+      });
+      writeInputs(week, inp);
+      var s2 = getSummary(weekLoads, week);
+      s2.rows.forEach(function (r) { card.querySelector('[data-d="' + r.key + '"]').textContent = money(r.diff); });
+      card.querySelector('[data-tr]').textContent = money(s2.total.rts);
+      card.querySelector('[data-tp]').textContent = money(s2.total.prev);
+      card.querySelector('[data-td]').textContent = money(s2.total.diff);
+    };
+    card.querySelectorAll('input').forEach(function (el) { el.addEventListener('input', recalc); });
   }
 
   /* ------------------------- Oyna (modal) ------------------------- */
@@ -326,6 +409,7 @@
       var warn = '';
       if (info.lateCount) warn += '<li>' + info.lateCount + ' ta yukning delivery sanasi hafta oxiridan keyin (qo\'lda tekshirasiz)</li>';
       if (info.unlisted.length) warn += '<li>Ro\'yxatda yo\'q Unit#: ' + esc(info.unlisted.join(', ')) + ' (hisobot oxirida)</li>';
+      if (info.unclassified > 0.004) warn += '<li>Booked For aniqlanmagan yuklar: ' + money(info.unclassified) + ' (Total hisob-kitobga kirmagan)</li>';
       if (info.noName) warn += '<li>' + info.noName + ' ta mashinada haydovchi ismi yo\'q</li>';
       var m = modal('<h2 style="' + H2 + '">C to\'xtash · Yakuniy tasdiq</h2><p style="' + SUB + '">' + esc(info.week.title) + '</p>' +
         '<div style="display:flex;gap:24px;flex-wrap:wrap;margin-bottom:10px"><div><b class="mono">' + info.blocks + '</b><div style="color:var(--steel);font-size:11.5px">mashina</div></div><div><b class="mono">' + info.loads + '</b><div style="color:var(--steel);font-size:11.5px">yuk</div></div><div><b class="mono">' + money(info.total) + '</b><div style="color:var(--steel);font-size:11.5px">jami Base Pay</div></div></div>' +
@@ -416,22 +500,29 @@
         payloads.push({
           user_id: user.id, driver_id: drv.id, pickup_date: dShort(l.pickup), delivery_date: dShort(l.delivery),
           broker: l.broker || null, load_number: l.load_number || null, from_location: l.from_location || null,
-          to_location: l.to_location || null, base_pay: l.base_pay || 0, dhd: l.dhd || 0, mileage: l.mileage || 0
+          to_location: l.to_location || null, base_pay: l.base_pay || 0, dhd: l.dhd || 0, mileage: l.mileage || 0,
+          booked_for: l.booked_for || null
         });
       }
-      var saved = 0, lastErr = null;
+      var saved = 0, lastErr = null, noBookCol = false;
+      var strip = function (p) { var c = Object.assign({}, p); delete c.booked_for; return c; };
       for (var j = 0; j < payloads.length; j += 50) {
         var chunk = payloads.slice(j, j + 50);
-        var ins = await sb.from('loads').insert(chunk);
+        var ins = await sb.from('loads').insert(noBookCol ? chunk.map(strip) : chunk);
+        if (ins.error && !noBookCol && /booked_for/i.test(ins.error.message || '')) {
+          noBookCol = true;   // jadvalda booked_for ustuni hali yo'q: ustunsiz saqlaymiz
+          ins = await sb.from('loads').insert(chunk.map(strip));
+        }
         if (!ins.error) { saved += chunk.length; continue; }
         for (var k = 0; k < chunk.length; k++) {
-          var one = await sb.from('loads').insert(chunk[k]);
+          var one = await sb.from('loads').insert(noBookCol ? strip(chunk[k]) : chunk[k]);
           if (!one.error) saved++; else lastErr = one.error;
         }
       }
       if (msgEl) {
         if (saved > 0) {
-          msgEl.textContent = 'Import tugadi: ' + drvIds.size + ' haydovchi, ' + saved + ' yuk qo\'shildi' + (toImport.length < loads.length ? ' (' + (loads.length - toImport.length) + ' ta bazada bor edi, o\'tkazib yuborildi)' : '') + '. ' + week.title;
+          msgEl.textContent = 'Import tugadi: ' + drvIds.size + ' haydovchi, ' + saved + ' yuk qo\'shildi' + (toImport.length < loads.length ? ' (' + (loads.length - toImport.length) + ' ta bazada bor edi, o\'tkazib yuborildi)' : '') + '. ' + week.title +
+            (noBookCol ? ' DIQQAT: loads jadvalida booked_for ustuni yo\'q, Total hisob-kitob uchun SQL ni bajarib, statementni qayta import qiling.' : '');
           msgEl.classList.add('show', 'ok');
         } else {
           msgEl.textContent = 'Yuklar saqlanmadi. ' + (lastErr ? (lastErr.message || JSON.stringify(lastErr)) : '');
@@ -526,6 +617,7 @@
         driversContainer.appendChild(card);
       });
       applyDriverSearch();
+      renderSummary(data.weekLoads, data.week);
     } catch (err) {
       console.error('All Drivers yuklashda xatolik:', err);
     }
@@ -542,7 +634,7 @@
     });
   }
 
-  function buildWorkbook(blocks, title) {
+  function buildWorkbook(blocks, title, summary) {
     var wb = new G.ExcelJS.Workbook();
     var ws = wb.addWorksheet('All Drivers');
     var widths = [6, 13, 13, 40, 14, 26, 26, 26, 12, 13, 16, 12];
@@ -613,6 +705,42 @@
       ws.getCell(r, 12).numFmt = '$#,##0.00';
       r++;
     });
+    if (summary) {
+      r += 1;
+      var P = '$#,##0.00', hdrFill = fill('FFF4CCCC');
+      // [birinchi ustun, oxirgi ustun] — har maydon uchun birlashtirilgan hujayralar
+      var span = [[4, 5], [6, 6], [7, 7], [8, 8], [9, 10], [11, 12]];
+      var put = function (row, idx, val, o) {
+        var a = span[idx][0], b = span[idx][1];
+        if (a !== b) ws.mergeCells(row, a, row, b);
+        for (var cc = a; cc <= b; cc++) { var x = ws.getCell(row, cc); x.border = BOX; if (o.fill) x.fill = o.fill; }
+        var cell = ws.getCell(row, a); cell.value = val; cell.font = font(o.sz || 11, o.b !== false); cell.alignment = o.al || CEN;
+        if (o.fmt) cell.numFmt = o.fmt;
+      };
+      ws.getRow(r).height = 20;
+      ['Companies', 'Total Gross amount', 'RTS paid', 'Previous week', 'Difference', 'Note'].forEach(function (h, i) { put(r, i, h, { fill: hdrFill, sz: 12 }); });
+      r++;
+      var first2 = r;
+      summary.rows.forEach(function (x) {
+        ws.getRow(r).height = 20;
+        put(r, 0, x.label, { fill: fill(x.argb), sz: 12 });
+        put(r, 1, x.gross, { fmt: P, al: RIGHT, sz: 12, fill: fill('FFCFE2F3') });
+        put(r, 2, x.rts || null, { fmt: P, al: RIGHT, sz: 11, b: false });
+        put(r, 3, x.prev || null, { fmt: P, al: RIGHT, sz: 11, b: false });
+        put(r, 4, { formula: 'F' + r + '-G' + r + '-H' + r, result: x.diff }, { fmt: P, al: RIGHT, sz: 12, fill: fill('FFCFE2F3') });
+        put(r, 5, x.note || null, { al: LEFT, sz: 11, b: false, fill: x.key === 'OU' || x.key === 'FM' ? fill('FFFFFF00') : null });
+        r++;
+      });
+      var last2 = r - 1, T = summary.total, TEAL = fill('FF1ABC9C');
+      ws.getRow(r).height = 28;
+      put(r, 0, 'Total:', { fill: TEAL, sz: 16 });
+      put(r, 1, { formula: 'SUM(F' + first2 + ':F' + last2 + ')', result: T.gross }, { fill: TEAL, sz: 16, fmt: P });
+      put(r, 2, { formula: 'SUM(G' + first2 + ':G' + last2 + ')', result: T.rts }, { fill: TEAL, sz: 16, fmt: P });
+      put(r, 3, { formula: 'SUM(H' + first2 + ':H' + last2 + ')', result: T.prev }, { fill: TEAL, sz: 16, fmt: P });
+      put(r, 4, { formula: 'SUM(I' + first2 + ':I' + last2 + ')', result: T.diff }, { fill: TEAL, sz: 16, fmt: P });
+      put(r, 5, null, { fill: TEAL });
+      r++;
+    }
     ws.pageSetup = { orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 };
     return { wb: wb, loads: totalLoads, total: totalPay };
   }
@@ -629,13 +757,14 @@
         week: data.week, blocks: data.blocks.length, loads: data.weekLoads.length, total: total,
         lateCount: data.weekLoads.filter(function (l) { var d = parseDate(l.delivery_date); return d && d > data.week.end; }).length,
         unlisted: data.blocks.filter(function (b) { return b.unlisted; }).map(function (b) { return 'Unit#' + b.unit; }),
-        noName: data.blocks.filter(function (b) { return !b.driver; }).length
+        noName: data.blocks.filter(function (b) { return !b.driver; }).length,
+        unclassified: getSummary(data.weekLoads, data.week).unknown
       };
       if (btn) { btn.disabled = false; btn.textContent = label; }
       if (!(await stageFinal(info))) return;   // C to'xtash nuqtasi
       if (btn) { btn.disabled = true; btn.textContent = 'Tayyorlanmoqda...'; }
       await loadExcelJS();
-      var built = buildWorkbook(data.blocks, title);
+      var built = buildWorkbook(data.blocks, title, getSummary(data.weekLoads, data.week));
       var buf = await built.wb.xlsx.writeBuffer();
       var blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
       var a = document.createElement('a');
@@ -685,7 +814,7 @@
   }
 
   if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { parseTrips: parseTrips, runChecks: runChecks, buildBlocks: buildBlocks, buildWorkbook: buildWorkbook, weekInfo: weekInfo, weekByOffset: weekByOffset, parseDate: parseDate, mondayOf: mondayOf, _stageUnknown: stageUnknown, _stageReview: stageReview, _stageFinal: stageFinal, registerUnit: registerUnit };
+    module.exports = { parseTrips: parseTrips, runChecks: runChecks, buildBlocks: buildBlocks, buildWorkbook: buildWorkbook, weekInfo: weekInfo, weekByOffset: weekByOffset, parseDate: parseDate, mondayOf: mondayOf, _stageUnknown: stageUnknown, _stageReview: stageReview, _stageFinal: stageFinal, registerUnit: registerUnit, getSummary: getSummary, companyOf: companyOf, _renderSummary: renderSummary };
     return;
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', install); else install();
