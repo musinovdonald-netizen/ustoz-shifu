@@ -874,6 +874,10 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 20c0-3 2.5-5.5 5.5-5.5s5.5 2.5 5.5 5.5"/><circle cx="17" cy="8.5" r="2.4"/><path d="M15.5 14.2c2.6.3 4.7 2.4 4.7 5.3"/></svg>
         <span class="nav-item-label">All Drivers</span>
       </a>
+      <a class="nav-item" data-panel="weekly-payment">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7h18v12H3z"/><path d="M3 11h18"/><path d="M7 15h4"/><path d="M8 3v4M16 3v4"/></svg>
+        <span class="nav-item-label">Weekly Payment</span>
+      </a>
       <a class="nav-item" data-panel="documents">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 3h9l5 5v13H6z"/><path d="M14 3v5h5"/></svg>
         <span class="nav-item-label">Hujjatlar</span>
@@ -1119,6 +1123,9 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
         <p>Statement import qilinganda haydovchilar shu yerda avtomatik paydo bo'ladi.</p>
       </div>
     </section>
+
+    <!-- WEEKLY PAYMENT PANEL -->
+    <section class="panel" id="panel-weekly-payment"></section>
 
     <!-- DOCUMENTS PANEL -->
     <section class="panel" id="panel-documents">
@@ -3263,7 +3270,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     panel.classList.add('active');
     try{ localStorage.setItem('ustoz_active_panel', panelName); }catch(e){}
     // All Drivers ekranida kompaniya tanlagichi ko'rinmaydi
-    const hideCompany = (panelName === 'all-drivers');
+    const hideCompany = (panelName === 'all-drivers' || panelName === 'weekly-payment');
     ['companySelect','addCompanyBtn'].forEach(id=>{
       const el = document.getElementById(id);
       if(el) el.style.display = hideCompany ? 'none' : '';
@@ -3735,5 +3742,6 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
   dropzone.addEventListener('drop', (e)=>{ addFilesToQueue(e.dataTransfer.files); });
 </script>
 <script src="all-drivers.js"></script>
+<script src="weekly-payment.js"></script>
 </body>
 </html>
